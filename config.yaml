@@ -1,0 +1,60 @@
+solar_opt:
+  module: solar_opt
+  class: SolarOpt
+  # =======================
+  # Octopus account details
+  # =======================
+
+  # If true the app will attempt to detect your tariff details automatcally
+  octopus_auto: false
+
+  # The following Can be omitted if Auto is working correctly
+  octopus_import_mpan: !secret octopus_import_mpan
+  octopus_export_mpan: !secret octopus_export_mpan
+  octopus_serial: !secret octopus_serial
+  octopus_import_tariff_code: E-2R-VAR-22-10-01-G
+  octopus_export_tariff_code: E-1R-AGILE-OUTGOING-19-05-13-G
+    
+
+  # All parameters can be a number or point to an entity UNLESS they start with 'entity_id'
+  # Plant parameters
+  battery_capacity_Wh: 10000 # Default: 10000
+  inverter_efficiency_percent: 93                           # Default: 93
+  charger_efficiency_percent: 93                            # Default: 93
+  maximum_dod_percent: sensor.solis_overdischarge_soc       # Default: 20
+  charger_power_watts: 3000
+  battery_voltage: sensor.solis_battery_voltage_bms         # Default: 50
+  entity_id_battery_soc: sensor.solis_battery_soc
+
+  # Solar forecast parameters:
+  # ==========================
+  #
+  # Valid options are:
+  #
+  # Solcast         - the Solcast mid-case forecast [Default]
+  # Solcast_p90     - the Solcast high estimate
+  # Solcast_p10     - the Solcast high estimate
+  # Solcast_Swanson - uses the Swanson's mean of the cashflows from the above (Recommended)
+  # 
+  # Set this using an "input_select" helper and it can be varied on the fly
+
+  solar_forecast: input_select.solar_forecast_source
+  # solar_forecast: Solcast_Swanson
+
+  # Load estimation
+  entity_id_load: sensor.solis_total_load_power
+  load_history_days: 7
+
+  # Charging time parameters:
+  # =========================
+  #
+  # Picks the optimum time to charge based on your import tariff
+  # for Eco7 and Go this will be fixed, for Agile it will vary
+  charge_auto_select: true
+
+  # If auto is false these fixed times will be used
+  charge_fixed_start: 00:30
+  charge_fixed_end: 07:30
+
+  default_target_soc: 100                       # Default un-optimised target SOC
+  optimise_flag: input_boolean.solis_eco7_opt
