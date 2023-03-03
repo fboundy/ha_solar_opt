@@ -111,7 +111,9 @@ These are required if `manual_tariff` is `false`. If `octopus_auto` is `true` th
 
 <h3>Plant Configuration Parameters *Incomplete*</h3
 
-All of these are required but will be defaulted if not specified.
+All of these are required but will be defaulted if not specified\*.
+
+\* Not yet implemented
 
 <h3>Charging Time Parameters</h3>
 
