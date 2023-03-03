@@ -58,7 +58,9 @@ This integration will pull Octopus Price data in to Home Assistant [Github](http
 
 <h2>Installation</h2>
 
-<h2>Configuration</h2>
+Once AppDaemon is installed simply download `solar_opt.py` and `config.yaml` from this repo and copy them to `/config/appdaemon/apps/ha_solar_opt`. AppDaemon will start running the app immediately but you will almost certainly need to update the configuration first.
+
+<h2>Configuration *Incomplete*</h2>
 
 All configuration is done by editing the parameters in the `/config/appdaemon/apps/ha_solar_opt/config.yaml` file. Many of the parameters can also be pointed to a Home Assistant entity rather than entering the parameter explicitly. This allows parameters to be updated dynamically from Home Assistant. In the example below `maximum_dod_percent` is taken from a sensor but `charger_power_watts` is set explicitly:
 
@@ -73,7 +75,7 @@ All configuration is done by editing the parameters in the `/config/appdaemon/ap
 | class         | string  | `SolarOpt`  |       `false`       | Internal reference for AppDaemon <b>DO NOT EDIT</b>                    |
 | manual_tariff | boolean |   `false`   |       `false`       | Use manual tariff data rather than from the Octopus Energy integration |
 
-<h3>Manual Tariff Parameters</h3>
+<h3>Manual Tariff Parameters *Not Yet Implemented*</h3>
 
 These are all required if `manual_tariff` is `true`. Any number of import or export time periods can be specified using sequential suffixes `_1`, `_2` etc. Each time period must have a start time and a price. Any periods with one and not the other will be ignored.
 
@@ -134,11 +136,43 @@ The app is triggered by firing the Home Assistant Event `SOLAR_OPT` which can be
 
 Solar Opt writes to the following Home Assistant enities:
 
-| Name                                 | State / Attributes |       Type        | Description                    |
-| ------------------------------------ | :----------------: | :---------------: | ------------------------------ |
-| sensor.solaropt_optimised_target_soc |       state        |       `int`       | Optimised Target Charging SOC  |
-|                                      |        soc         | `list` of `dict`s | Forecast Optimised SOC vs Time |
+| Name                                 | State / Attributes |       Type        | Description                                             |
+| ------------------------------------ | :----------------: | :---------------: | ------------------------------------------------------- |
+| sensor.solaropt_optimised_target_soc |       state        |       `int`       | Optimised Target Charging SOC                           |
+|                                      |        soc         | `list` of `dict`s | Forecast Optimised SOC vs Time                          |
+| sensor.solaropt_charge_start         |       state        |    `datetime`     | Next charging slot start                                |
+| sensor.solaropt_charge_end           |       state        |    `datetime`     | Next charging slot end                                  |
+| sensor.solaropt_charge_current       |       state        |      `float`      | Calculated current to reach Target SOC in the next slot |
 
-<h2>Using the App
+<h2>Development</h2>
+
+This app is still in development. Expect things not to work!
+
+Please use [GitHub Issues](https://github.com/fboundy/ha_solar_opt/issues) to feedback bugs, issues and feature requests.
+
+Anyone who wants to help with the development is welcome.
+
+<h2>FAQs</h2>
+<h3>What Does It Do?</h3>
+
+The app attempts to optimise the the charge applied to a battery tied to a PV inverter so that the overall cost is minimised. If a dual rate tariff such as Economy7 is used, in the winter it often makes sense to fully charge the battery overnight. In full summer it may make sense not to charge it at all as sufficient surplus from the day will keep the battery charged overnight. However on cloudy summwer days and in spring/autumn the optimum is less obvious. The app attempts to predict the optimum target State of Charge (SOC) to aim for overnight depending on:
+
+- The day and night tariffs
+- The expected solar yield for the following day
+- The expected consumption for the following day
+
+The optimum SOC is output as a Home Assistant sensor. The user can then use this in any way they see fit to programme their system: either through an Automation or manually. As such, the ability to write to the inverter is not an absolute requirement.
+
+<h3>What Solar Forecast Should I Use?</h3>
+
+You can choose to use any of the three confidence levels that Solcast delivers (10% = low, Base, 90% = high) or you can used the Swanson's Mean approach.
+
+Depending on the forecast and the relative Day/Night tariffs and whether one has an export contract, it is often that the marginal cost of over-charging is low: Octopus Agile export rates during the day are often similar to Octopus Economy 7 Night import rates. However, the marginal cost of under-charging is high due to the fact that you will end up using Day rate electricity in the evening/overnight.
+
+The safest option is therefore to use `Solcast_p10`. However if the sun delivers at the top end of the range this will be sub-optimal. The `Solis_Swanson` approach calclates the cashflows at all 3 confidence levels and then weights them 30:40:30 to optimise on an expected cost. This <i>should</i> be the optimum approach, particularly if you have no export contract.
+
+<h3>Does It Work With Agile?</h3>
+
+It definitely works with Agile Export. Agile import is more challenging as the optimum charging slot is not fixed. I haven't been able to test Agile Import fully yet.
 
 <h2>Plotting Output and Input Data
