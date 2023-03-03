@@ -1,6 +1,9 @@
 solar_opt:
   module: solar_opt
   class: SolarOpt
+
+  manual_tariff: true
+  
   # =======================
   # Octopus account details
   # =======================

@@ -67,7 +67,7 @@ class SolarOpt(hass.Hass):
                 except:
                     pass
 
-            self.log(f"Loaded parameter {key}: {self.params[key]} as a {type(self.params[key])}")
+ #           self.log(f"Loaded parameter {key}: {self.params[key]} as a {type(self.params[key])}")
 
     def mpan_sensor(self, tariff):
         mpan = self.params[f"octopus_{tariff}_mpan"]
@@ -340,8 +340,6 @@ class SolarOpt(hass.Hass):
         self.df["net_cost"] = 0
         self.df["soc"] = 0
         self.df["ref_cost"] = -self.df["load"] * self.df["import"] / 100 / 1000 * self.freq
-
-        self.log(target_soc)
 
         for source in weights:
             battery_flows = self.df[source] + self.df["load"]
