@@ -134,6 +134,11 @@ The app is triggered by firing the Home Assistant Event `SOLAR_OPT` which can be
 
 Solar Opt writes to the following Home Assistant enities:
 
+| Name                                 | State / Attributes |       Type        | Description                    |
+| ------------------------------------ | :----------------: | :---------------: | ------------------------------ |
+| sensor.solaropt_optimised_target_soc |       state        |       `int`       | Optimised Target Charging SOC  |
+|                                      |        soc         | `list` of `dict`s | Forecast Optimised SOC vs Time |
+
 <h2>Using the App
 
 <h2>Plotting Output and Input Data
