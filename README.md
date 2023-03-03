@@ -152,6 +152,7 @@ Solar Opt writes to the following Home Assistant enities:
 | ------------------------------------ | :----------------: | :---------------: | ------------------------------------------------------- |
 | sensor.solaropt_optimised_target_soc |       state        |       `int`       | Optimised Target Charging SOC                           |
 |                                      |        soc         | `list` of `dict`s | Forecast Optimised SOC vs Time                          |
+|                                      |      raw_soc       | `list` of `dict`s | Forecast Initial SOC vs Time with no Overnight Charging |
 | sensor.solaropt_charge_start         |       state        |    `datetime`     | Next charging slot start                                |
 | sensor.solaropt_charge_end           |       state        |    `datetime`     | Next charging slot end                                  |
 | sensor.solaropt_charge_current       |       state        |      `float`      | Calculated current to reach Target SOC in the next slot |
@@ -191,4 +192,4 @@ At present the user defines an entity which contains consumption data. This is t
 
 It definitely works with Agile Export. Agile import is more challenging as the optimum charging slot is not fixed. I haven't been able to test Agile Import fully yet.
 
-<h2>Plotting Output and Input Data
+<h2>Plotting Output and Input Data *Incomplete*</h2>
