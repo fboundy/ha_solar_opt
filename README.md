@@ -10,7 +10,7 @@ Initial pre-release. Quite probably full of un-documented features....
 
 This app is not stand-alone.
 
-<h3>Solcast Hobby Account</h>
+<h3>Solcast Hobby Account</h3>
 
 <b>Solar_Opt</b> relies on solar forecasts data from Solcast. You can sign up for a Private User account [here](https://solcast.com/free-rooftop-solar-forecasting?gclid=CjwKCAiAr4GgBhBFEiwAgwORrQp6co5Qw8zNjEgUhBee7Hfa39_baEWG-rB-GB3FFpiaIA5eAPHhahoC3vAQAvD_BwE). This licence gives you 10 (it used to be 50 :-( ) API calls a day.
 
@@ -34,7 +34,7 @@ AppDaemon is a loosely coupled, multi-threaded, sandboxed python execution envir
 
 4. Click on <b>Configuration</b> at the top
 
-5. Click the 3 dots and <b>Edit in YAML</b>:
+5. Click the 3 dots and <b>Edit in YAML</b> to add `pandas` as a Python package:
 
    ```
    init_commands: []
