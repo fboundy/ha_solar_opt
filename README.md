@@ -1,8 +1,14 @@
-# Home Assitant Solar Optimiser
+# Home Assistant Solar Optimiser
 
 Solar / Battery Charging Optimisation for Home Assistant
 
+<h2>Pre-Release v1.0.0</h2>
+
+Initial pre-release. Quite probably full of un-documented features....
+
 <h2>Pre-requisites</h2>
+
+This app is not stand-alone.
 
 <h3>Solcast Hobby Account</h>
 
@@ -148,7 +154,7 @@ Solar Opt writes to the following Home Assistant enities:
 
 This app is still in development. Expect things not to work!
 
-Please use [GitHub Issues](https://github.com/fboundy/ha_solar_opt/issues) to feedback bugs, issues and feature requests.
+Please use [GitHub Issues](https://github.com/fboundy/ha_solar_opt/issues) to feedback bugs, issues and feature requests. Please check through the existing issues first and use appropriate labels.
 
 Anyone who wants to help with the development is welcome.
 
@@ -170,6 +176,10 @@ You can choose to use any of the three confidence levels that Solcast delivers (
 Depending on the forecast and the relative Day/Night tariffs and whether one has an export contract, it is often that the marginal cost of over-charging is low: Octopus Agile export rates during the day are often similar to Octopus Economy 7 Night import rates. However, the marginal cost of under-charging is high due to the fact that you will end up using Day rate electricity in the evening/overnight.
 
 The safest option is therefore to use `Solcast_p10`. However if the sun delivers at the top end of the range this will be sub-optimal. The `Solis_Swanson` approach calclates the cashflows at all 3 confidence levels and then weights them 30:40:30 to optimise on an expected cost. This <i>should</i> be the optimum approach, particularly if you have no export contract.
+
+<h3>Where Does the Forecast Consumption Come From?</h3>
+
+At present the user defines an entity which contains consumption data. This is then averaged on a half-hourly basis over a given number of days. This is probably one of the big uncertainties in the forecast. Suggested improvements are welcome.
 
 <h3>Does It Work With Agile?</h3>
 
