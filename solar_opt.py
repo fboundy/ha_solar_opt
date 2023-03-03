@@ -5,7 +5,7 @@ import pandas as pd
 from math import ceil
 
 # %%
-from json import dumps
+# from json import dumps
 
 VERSION = "0.1.0"
 
@@ -60,11 +60,11 @@ class SolarOpt(hass.Hass):
             # Try to coerce it to an int
             try:
                 self.params[key] = int(self.params[key])
-            except:
+            except Exception as e:
                 # Then a float
                 try:
                     self.params[key] = float(self.params[key])
-                except:
+                except Exception as e:
                     pass
 
  #           self.log(f"Loaded parameter {key}: {self.params[key]} as a {type(self.params[key])}")
@@ -132,8 +132,8 @@ class SolarOpt(hass.Hass):
             if not self.load_prices():
                 raise Exception
 
-        except:
-            self.log("Unable to load price data")
+        except Exception as e:
+            self.log(f"Unable to load price data": {e})
             return False
 
         # Load Solcast
@@ -141,8 +141,8 @@ class SolarOpt(hass.Hass):
             if not self.load_solcast():
                 raise Exception
 
-        except:
-            self.log("Unable to load solar forecast")
+        except Exception as e:
+            self.log(f"Unable to load solar forecast: {e}")
             return False
 
         # Load the expected load
@@ -150,8 +150,8 @@ class SolarOpt(hass.Hass):
             if not self.load_load():
                 raise Exception
 
-        except:
-            self.log("Unable to load estimated load")
+        except Exception as e:
+            self.log(f"Unable to load estimated load: {e}")
             return False
 
         # Calculate when the next charging slot is
@@ -187,8 +187,7 @@ class SolarOpt(hass.Hass):
             self.my_entity.set_state(state=state, attributes=attributes)
 
         except Exception as e:
-            self.log(f"Couldn't write to entity {entity}")
-            self.log(e)
+            self.log(f"Couldn't write to entity {entity}: {e}")
 
     def write_output(self):
         self.write_to_hass(
@@ -404,9 +403,9 @@ class SolarOpt(hass.Hass):
                     # Read the price from the Octopus sensor attribute and convert to a DataFrame
                     prices = self.get_state(sensor, attribute="all")["attributes"]["rates"]
 
-                except:
+                except Exception as e:
                     self.log(f"Attributes unavailable for sensor: {sensor}")
-                    self.log(f"No {tariff} price data available")
+                    self.log(f"No {tariff} price data available: {e}")
 
                 df = pd.DataFrame(prices)
                 df = df.set_index("from")["rate"]
@@ -433,7 +432,7 @@ class SolarOpt(hass.Hass):
 
             return True
 
-        except:
+        except Exception as e:
             return False
 
     def load_solcast(self):
@@ -442,8 +441,8 @@ class SolarOpt(hass.Hass):
             solar = self.get_state(SOLCAST_ENTITY_TODAY, attribute="all")["attributes"]["detailedForecast"]
             solar += self.get_state(SOLCAST_ENTITY_TOMORROW, attribute="all")["attributes"]["detailedForecast"]
 
-        except:
-            self.log("Failed to get solcast attributes")
+        except Exception as e:
+            self.log(f"Failed to get solcast attributes: {e}")
             return False
 
         try:
@@ -463,7 +462,8 @@ class SolarOpt(hass.Hass):
             self.log("** Solcast forecast loaded OK **")
             return True
 
-        except:
+        except Exception as e:
+            self.log(f"Error loading Solcast: {e}")
             return False
 
     def load_load(self):
@@ -473,8 +473,9 @@ class SolarOpt(hass.Hass):
             # load history fot the last N days from the specified sensor
             df = self.hass2df(self.params["entity_id_load"], days=int(self.params["load_history_days"]))
 
-        except:
+        except Exception as e:
             self.log(f"Unable to get historical Load from {self.params['entity_id_load']}")
+            self.log(f"Error: {e}")
             return False
 
         try:
@@ -493,116 +494,6 @@ class SolarOpt(hass.Hass):
             self.log("** Estimated load loaded OK **")
             return True
 
-        except:
+        except Exception as e:
+            self.log(f"Error loading load data: {e}")
             return False
-
-
-#     def write_soc_to_mqtt(self):
-#         state_topic = "homeassistant/sensor/solis_opt/state"
-#         attributes_topic = "homeassistant/sensor/solis_opt/attr"
-#         mqtt_fields = [
-#             {
-#                 "name": "Solis Optimised Target SOC",
-#                 "object_id": "solis_opt_target_soc",
-#                 "device_class": "battery",
-#                 "unit_of_measurement": "%",
-#                 "value_template": "{{ value_json.target_soc}}",
-#                 "state_topic": state_topic,
-#                 "state_class": "measurement",
-#                 "json_attributes_topic": attributes_topic,
-#             },
-#             {
-#                 "name": "Solis Optimised Backup SOC",
-#                 "object_id": "solis_opt_backup_soc",
-#                 "device_class": "battery",
-#                 "unit_of_measurement": "%",
-#                 "value_template": "{{ value_json.backup_soc}}",
-#                 "state_topic": state_topic,
-#                 "state_class": "measurement",
-#             },
-#         ]
-
-#         mqtt_values = {
-#             "target_soc": self.eco7_target_soc,
-#             "backup_soc": self.dfs_soc,
-#         }
-
-#         self.mqtt_attributes["soc"] = self.df[["period_end", "soc"]].to_dict("records")
-
-#         for field in mqtt_fields:
-#             conf_topic = "homeassistant/sensor/{0}/config".format(field["object_id"])
-#             conf_payload = dumps(field)
-#             # self.log(conf_topic + ":" + conf_payload)
-#             self.mqtt.mqtt_publish(conf_topic, conf_payload, retain=False)
-
-#         # self.log("MQTT Values: ")
-#         # self.log(mqtt_values)
-#         self.mqtt.mqtt_publish(state_topic, dumps(mqtt_values), retain=False)
-#         self.mqtt.mqtt_publish(attributes_topic, dumps(self.mqtt_attributes), retain=False)
-
-
-#     def optimise_dfs(self, event_name, data, kwargs):
-#         self.log("Optimising Backup SOC for National Grid ESO Demand Flexibility Service")
-#         dfs_start_dt = self.get_state("sensor.national_grid_eso_latest_dfs_start_3")
-#         dfs_end_dt = self.get_state("sensor.national_grid_eso_latest_dfs_end_3")
-#         # dfs_start_dt = self.get_state("input_datetime.saver_session_start")
-#         # dfs_end_dt = self.get_state("input_datetime.saver_session_end")
-
-#         self.log(f"DFS from {dfs_start_dt} to {dfs_end_dt}")
-
-#         self.optimise_eco7(event_name, data, kwargs)
-#         dfs_mask = (self.df.index > dfs_start_dt) & (self.df.index <= dfs_end_dt)
-#         dfs_load = -self.df[dfs_mask]["load"].sum() * self.freq
-#         self.log(f"Expected total load during DFS: {(dfs_load / 1000):0.2f} kWh")
-#         margin = 0.2
-#         self.dfs_soc = self.battery_min_soc + int((dfs_load / self.battery_capacity) * 100 * (1 + margin))
-#         self.log(f"Optimised Backup SOC (with {margin:0.0%} margin): {self.dfs_soc}%")
-#         """
-#         Opt should be solar-load for any period:
-
-#         - After the end of the Eco7
-#         - Where SOC < calculated value
-#         """
-#         # change the mask so it is now the period between end of Eco7 and start of DFS
-#         eco7_end = pd.Timestamp(dfs_start_dt).normalize().tz_localize("UTC") + pd.Timedelta(
-#             self.eco7_end_dt.strftime("%H:%M:%S")
-#         )
-#         self.log(f"Eco7 end before DFS: {eco7_end}")
-#         dfs_mask = (self.df.index <= dfs_start_dt) & (self.df.index > eco7_end) & (self.df["soc"] < self.dfs_soc)
-#         self.log(f"SOC: {self.df.loc[dfs_mask, 'soc'][0]:0.1f}")
-#         self.log(f"SOC: {self.df.loc[dfs_mask, 'soc'][5]:0.1f}")
-#         self.log(f"Batt: {self.df.loc[dfs_mask, 'battery_flow'][0]:0.1f}")
-#         self.log(f"Batt: {self.df.loc[dfs_mask, 'battery_flow'][5]:0.1f}")
-#         self.log(f"Solar: {self.df.loc[dfs_mask, 'solar'][0]:0.1f}")
-#         self.log(f"Solar: {self.df.loc[dfs_mask, 'solar'][5]:0.1f}")
-#         self.df["opt1"] = ((self.dfs_soc - self.df["soc"]) / 100 * self.battery_capacity) / self.freq * -1
-#         self.log(f"Opt: {self.df.loc[dfs_mask, 'opt'][0]:0.1f}")
-#         self.log(f"Opt: {self.df.loc[dfs_mask, 'opt'][5]:0.1f}")
-#         self.log(f"Opt1: {self.df.loc[dfs_mask, 'opt1'][0]:0.1f}")
-#         self.log(f"Opt1: {self.df.loc[dfs_mask, 'opt1'][5]:0.1f}")
-#         self.log(f"Load: {self.df.loc[dfs_mask, 'load'][0]:0.1f}")
-#         self.log(f"Load: {self.df.loc[dfs_mask, 'load'][5]:0.1f}")
-
-#         self.df["opt1"] = self.df[["opt1", "load"]].max(axis=1) * -1
-
-#         self.df.loc[dfs_mask, "opt"] = (
-#             self.df.loc[dfs_mask, "opt"]
-#             + self.df.loc[dfs_mask, "opt1"]
-#             - self.df.loc[dfs_mask, "solar"] * self.charger_efficiency
-#         )
-
-#         self.log(f"Opt: {self.df.loc[dfs_mask, 'opt'][0]:0.1f}")
-#         self.log(f"Opt: {self.df.loc[dfs_mask, 'opt'][5]:0.1f}")
-#         self.log(f"Opt1: {self.df.loc[dfs_mask, 'opt1'][0]:0.1f}")
-#         self.log(f"Opt1: {self.df.loc[dfs_mask, 'opt1'][5]:0.1f}")
-#         self.calc_flows()
-#         self.log(f"Batt: {self.df.loc[dfs_mask, 'battery_flow'][0]:0.1f}")
-#         self.log(f"Batt: {self.df.loc[dfs_mask, 'battery_flow'][5]:0.1f}")
-#         self.log(f"SOC: {self.df.loc[dfs_mask, 'soc'][0]:0.1f}")
-#         self.log(f"SOC: {self.df.loc[dfs_mask, 'soc'][5]:0.1f}")
-#         self.write_soc_to_mqtt()
-
-
-# # %%
-
-# %%
