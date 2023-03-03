@@ -44,7 +44,7 @@ AppDaemon is a loosely coupled, multi-threaded, sandboxed python execution envir
 
    ```
 
-6. Go back to the <b<Info</b> page and click on <b>Start</b>
+6. Go back to the <b><Info</b> page and click on <b>Start</b>
 
 7. Click on <b>Log</b>. Appdaemon will download and install numpy and pandas. Click on <b>Refresh</b> until you see:
 
@@ -75,11 +75,13 @@ All configuration is done by editing the parameters in the `/config/appdaemon/ap
 
 <h3>Required parameters:</h3>
 
-| Name          |  Type   |   Default   | Can Point to Entity | Description                                                            |
-| ------------- | :-----: | :---------: | :-----------------: | ---------------------------------------------------------------------- |
-| module        | string  | `solar_opt` |       `false`       | Internal reference for AppDaemon <b>DO NOT EDIT</b>                    |
-| class         | string  | `SolarOpt`  |       `false`       | Internal reference for AppDaemon <b>DO NOT EDIT</b>                    |
-| manual_tariff | boolean |   `false`   |       `false`       | Use manual tariff data rather than from the Octopus Energy integration |
+| Name          |  Type   |   Default   | Can Point to Entity | Description                                                              |
+| ------------- | :-----: | :---------: | :-----------------: | ------------------------------------------------------------------------ |
+| module        | string  | `solar_opt` |       `false`       | Internal reference for AppDaemon <b>DO NOT EDIT</b>                      |
+| class         | string  | `SolarOpt`  |       `false`       | Internal reference for AppDaemon <b>DO NOT EDIT</b>                      |
+| manual_tariff | boolean |   `false`   |       `false`       | Use manual tariff data rather than from the Octopus Energy integration\* |
+
+\*This feature is not yet implemented
 
 <h3>Manual Tariff Parameters *Not Yet Implemented*</h3>
 
@@ -106,6 +108,10 @@ These are required if `manual_tariff` is `false`. If `octopus_auto` is `true` th
 | octopus_serial             | string  |   !secret octopus_serial    |       `false`       | The Octopus meter serial number                                                                                                                                                                   |
 | octopus_import_tariff_code | string  |                             |       `false`       | The Octopus import tariff code                                                                                                                                                                    |
 | octopus_export_tariff_code | string  |                             |       `false`       | The Octopus export tariff code. Omit if there is no export                                                                                                                                        |
+
+<h3>Plant Configuration Parameters *Incomplete*</h3
+
+All of these are required but will be defaulted if not specified.
 
 <h3>Charging Time Parameters</h3>
 
