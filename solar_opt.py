@@ -68,9 +68,10 @@ class SolarOpt(hass.Hass):
                     self.listen_state(self.optimise_state_change, self.args[key])
 
             else:
-                for x in ["sensor", "input"]:
-                    if x in self.args[key] and not self.entity_exists(self.args[key]):
-                        self.log(f"WARNING: {self.args[key]} does not resolve to a valid entity")
+                if isinstance(self.args[key], str):
+                    for x in ["sensor", "input"]:
+                        if x in self.args[key] and not self.entity_exists(self.args[key]):
+                            self.log(f"WARNING: {self.args[key]} does not resolve to a valid entity")
 
                 self.params[key] = self.args[key]
 
