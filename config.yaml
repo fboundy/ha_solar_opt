@@ -2,11 +2,26 @@ solar_opt:
   module: solar_opt
   class: SolarOpt
 
-  manual_tariff: true
+  manual_tariff: false
+  # ========================================
+  # Manual Tariffs
+  # ========================================
+ 
+  # These are all required if manual_tariff is true. Any number of import or export time periods 
+  # can be specified using sequential suffixes _1, _2 etc. Each time period must have a start time 
+  # and a price (in p/kWh). Any periods with one and not the other will be ignored (the exception
+  # being where a single export price is specified for the day). All parameters can be specified 
+  # explicitly or by pointing to an entity
+ 
+  import_tariff_1_price: 16.80
+  import_tariff_1_start: input_datetime.economy_7_start
+  import_tariff_2_price: input_number.electricity_tariff_peak
+  import_tariff_2_start: 07:30
+  export_tariff_1_price: 15.00
   
-  # =======================
-  # Octopus account details
-  # =======================
+  # ========================================
+  # Octopus account parameters
+  # ========================================
 
   # If true the app will attempt to detect your tariff details automatcally
   octopus_auto: false
@@ -18,9 +33,13 @@ solar_opt:
   octopus_import_tariff_code: E-2R-VAR-22-10-01-G
   octopus_export_tariff_code: E-1R-AGILE-OUTGOING-19-05-13-G
     
-
-  # All parameters can be a number or point to an entity UNLESS they start with 'entity_id'
+  # ========================================
   # Plant parameters
+  # ========================================
+
+  # All parameters can be a number or point to an entity UNLESS they start with 'entity_id'. All of
+  # these are required but will be defaulted if not specified
+
   battery_capacity_Wh: 10000 # Default: 10000
   inverter_efficiency_percent: 93                           # Default: 93
   charger_efficiency_percent: 93                            # Default: 93
@@ -29,8 +48,9 @@ solar_opt:
   battery_voltage: sensor.solis_battery_voltage_bms         # Default: 50
   entity_id_battery_soc: sensor.solis_battery_soc
 
-  # Solar forecast parameters:
-  # ==========================
+  # ========================================
+  # Solar and consultion forecast parameters
+  # ========================================
   #
   # Valid options are:
   #
@@ -42,14 +62,15 @@ solar_opt:
   # Set this using an "input_select" helper and it can be varied on the fly
 
   solar_forecast: input_select.solar_forecast_source
-  # solar_forecast: Solcast_Swanson
 
-  # Load estimation
-  entity_id_load: sensor.solis_total_load_power
-  load_history_days: 7
+  # consumption estimation
+  entity_id_consumption: sensor.solis_total_load_power
+  consumption_history_days: 7
+  consumption_grouping: max
 
+  # ========================================
   # Charging time parameters:
-  # =========================
+  # ========================================
   #
   # Picks the optimum time to charge based on your import tariff
   # for Eco7 and Go this will be fixed, for Agile it will vary
@@ -58,6 +79,5 @@ solar_opt:
   # If auto is false these fixed times will be used
   charge_fixed_start: 00:30
   charge_fixed_end: 07:30
-
   default_target_soc: 100                       # Default un-optimised target SOC
   optimise_flag: input_boolean.solis_eco7_opt
