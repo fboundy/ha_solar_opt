@@ -225,3 +225,5 @@ It definitely works with Agile Export. Agile import is more challenging as the o
 <h2>Plotting Output and Input Data *Incomplete*</h2>
 
 `solar_opt_apex_charts.yaml` can be used to plot the output using [Apex Charts](https://github.com/RomRider/apexcharts-card)
+
+[!apex_charts.png]
