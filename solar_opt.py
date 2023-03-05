@@ -7,7 +7,7 @@ from math import ceil
 # %%
 # from json import dumps
 
-VERSION = "1.1.1"
+VERSION = "1.1.3"
 
 DEBUG = True
 DEBUG_TIME_NOW = pd.Timestamp("2023-03-03 06:00:00+00:00")
@@ -133,7 +133,9 @@ class SolarOpt(hass.Hass):
                 if DEBUG:
                     self.log(f"Loading Octopus tariffs from specified MPANs")
                 for tariff in TARIFFS:
-                    self.sensors[tariff] = self.mpan_sensor(tariff)
+                    if f"octopus_{tariff}_mpan" in self.params:
+                        self.sensors[tariff] = self.mpan_sensor(tariff)
+
         else:
             if DEBUG:
                 self.log(f"Manual tariff specified. Not loading tariffs from Octopus integration.")
@@ -202,10 +204,12 @@ class SolarOpt(hass.Hass):
         self.log(f"Reference cost (no solar):  GBP{self.df['ref_cost'].sum():5.2f}")
         self.log(f"Net cost (no optimisation): GBP{self.df['net_cost'].sum():5.2f}")
 
-        if self.params["optimise_flag"]:
+        if (self.params["optimise_flag"]) and (self.df["import"].sum() > 0):
             self.log("Optimising target SOC")
             soc_range = list(range(int(ceil(self.params["maximum_dod_percent"] / 5) * 5), 101, 5))
         else:
+            if self.df["import"].sum() == 0:
+                self.log("WARNING: Import price is zero. Unable to optimise.")
             soc_range = [int(float(self.params["default_target_soc"]))]
             self.log(f"Using default target SOC of {soc_range[0]}%")
 
@@ -465,7 +469,7 @@ class SolarOpt(hass.Hass):
                         # Sort the dict
                         valid_prices = dict(sorted(valid_prices.items()))
                         if DEBUG:
-                            self.log(f"Valid Imports: {valid_prices}")
+                            self.log(f"Valid {tariff} prices: {valid_prices}")
 
                         for start_datetime in valid_prices:
                             self.df.loc[self.df.index >= start_datetime, tariff] = valid_prices[start_datetime]
@@ -478,35 +482,39 @@ class SolarOpt(hass.Hass):
                     self.log("Loading sensor-based tariffs")
 
                 for tariff in TARIFFS:
-                    sensor = self.sensors[tariff]
-                    self.log(f"{tariff.title()} sensor: {sensor}")
+                    if tariff in self.sensors.keys():
+                        sensor = self.sensors[tariff]
+                        self.log(f"{tariff.title()} sensor: {sensor}")
 
-                    try:
-                        # Read the price from the Octopus sensor attribute and convert to a DataFrame
-                        prices = self.get_state(sensor, attribute="all")["attributes"]["rates"]
+                        try:
+                            # Read the price from the Octopus sensor attribute and convert to a DataFrame
+                            prices = self.get_state(sensor, attribute="all")["attributes"]["rates"]
 
-                    except Exception as e:
-                        self.log(f"Attributes unavailable for sensor: {sensor}")
-                        self.log(f"No {tariff} price data available: {e}")
+                        except Exception as e:
+                            self.log(f"Attributes unavailable for sensor: {sensor}")
+                            self.log(f"No {tariff} price data available: {e}")
 
-                    df = pd.DataFrame(prices)
-                    df = df.set_index("from")["rate"]
+                        df = pd.DataFrame(prices)
+                        df = df.set_index("from")["rate"]
 
-                    # Convert the index to datetime
-                    df.index = pd.to_datetime(df.index)
+                        # Convert the index to datetime
+                        df.index = pd.to_datetime(df.index)
 
-                    # If it's only today's data pad it out assuming tomorrow = today
-                    if len(df) < 94:
-                        dfx = df.copy()
-                        dfx.index = dfx.index + pd.Timedelta("1D")
-                        df = pd.concat([df, dfx])
+                        # If it's only today's data pad it out assuming tomorrow = today
+                        if len(df) < 94:
+                            dfx = df.copy()
+                            dfx.index = dfx.index + pd.Timedelta("1D")
+                            df = pd.concat([df, dfx])
 
-                    # Fill andy missing data (after 23:00) with the 22:30 data
-                    self.df[tariff] = df
-                    self.df[tariff].fillna(self.df[tariff].dropna()[-1], inplace=True)
+                        # Fill andy missing data (after 23:00) with the 22:30 data
+                        self.df[tariff] = df
+                        self.df[tariff].fillna(self.df[tariff].dropna()[-1], inplace=True)
 
-                    self.log(f"** {tariff.title()} tariff price data loaded OK **")
-
+                        self.log(f"** {tariff.title()} tariff price data loaded OK **")
+                    else:
+                        self.log(f"** {tariff.title()} price data unavailable - set to zero **")
+                        if tariff == "Import":
+                            self.log("Unable to optimise with no import tariff")
                 # DEBUG
                 if FAKE_AGILE_IMPORT:
                     self.df["import"] = self.df["export"] + FAKE_AGILE_DIFF
