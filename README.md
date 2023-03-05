@@ -183,10 +183,9 @@ Solar Opt writes to the following Home Assistant enities:
 |                                      |        soc         | `list` of `dict`s | Forecast Optimised SOC vs Time                          |
 |                                      |      raw_soc       | `list` of `dict`s | Forecast Initial SOC vs Time with no Overnight Charging |
 |                                      |    consumption     | `list` of `dict`s | Forecast Consumption vs Time                            |
-
-| sensor.solaropt_charge_start | state | `datetime` | Next charging slot start |
-| sensor.solaropt_charge_end | state | `datetime` | Next charging slot end |
-| sensor.solaropt_charge_current | state | `float` | Calculated current to reach Target SOC in the next slot |
+| sensor.solaropt_charge_start         |       state        |    `datetime`     | Next charging slot start                                |
+| sensor.solaropt_charge_end           |       state        |    `datetime`     | Next charging slot end                                  |
+| sensor.solaropt_charge_current       |       state        |      `float`      | Calculated current to reach Target SOC in the next slot |
 
 <h2>Development</h2>
 
