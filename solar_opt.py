@@ -7,7 +7,7 @@ from math import ceil
 # %%
 # from json import dumps
 
-VERSION = "1.0.2"
+VERSION = "1.1.0"
 
 DEBUG = True
 DEBUG_TIME_NOW = pd.Timestamp("2023-03-03 06:00:00+00:00")
