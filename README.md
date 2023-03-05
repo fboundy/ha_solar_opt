@@ -66,7 +66,7 @@ This integration will pull Octopus Price data in to Home Assistant [Github](http
 
 Once AppDaemon is installed simply download `solar_opt.py` and `config.yaml` from this repo and copy them to `/config/appdaemon/apps/ha_solar_opt`. AppDaemon will start running the app immediately but you will almost certainly need to update the configuration first.
 
-<h2>Configuration *Incomplete*</h2>
+<h2>Configuration</h2>
 
 All configuration is done by editing the parameters in the `/config/appdaemon/apps/ha_solar_opt/config.yaml` file. Many of the parameters can also be pointed to a Home Assistant entity rather than entering the parameter explicitly. This allows parameters to be updated dynamically from Home Assistant. In the example below `maximum_dod_percent` is taken from a sensor but `charger_power_watts` is set explicitly:
 
@@ -100,24 +100,51 @@ These are all required if `manual_tariff` is `true`. Any number of import or exp
 
 These are required if `manual_tariff` is `false`. If `octopus_auto` is `true` the remaining parameters will be detected automatically and can be omitted. Optionally (and be default) these parameters can also be read from the `secrets.yaml` file.
 
-| Name                       |  Type   |           Default           | Can Point to Entity | Description                                                                                                                                                                                       |
-| -------------------------- | :-----: | :-------------------------: | :-----------------: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| octopus_auto               | boolean |           `true`            |       `false`       | Automatically get as many as possible of the remaining Octopus parameters directly from the Octopus Energy integration. Any that are missing will be taken from the explictly defined parameters. |
-| octopus_import_mpan        | string  | !secret octopus_import_mpan |       `false`       | The MPAN of the Octopus import meter                                                                                                                                                              |
-| octopus_export_mpan        | string  | !secret octopus_export_mpan |       `false`       | The MPAN of the Octopus export meter. Omit if there is no export                                                                                                                                  |
-| octopus_serial             | string  |   !secret octopus_serial    |       `false`       | The Octopus meter serial number                                                                                                                                                                   |
-| octopus_import_tariff_code | string  |                             |       `false`       | The Octopus import tariff code                                                                                                                                                                    |
-| octopus_export_tariff_code | string  |                             |       `false`       | The Octopus export tariff code. Omit if there is no export                                                                                                                                        |
+| Name                       |   Type    |           Default           | Can Point to Entity | Description                                                                                                                                                                                       |
+| -------------------------- | :-------: | :-------------------------: | :-----------------: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| octopus_auto               | `boolean` |           `true`            |       `false`       | Automatically get as many as possible of the remaining Octopus parameters directly from the Octopus Energy integration. Any that are missing will be taken from the explictly defined parameters. |
+| octopus_import_mpan        | `string`  | !secret octopus_import_mpan |       `false`       | The MPAN of the Octopus import meter                                                                                                                                                              |
+| octopus_export_mpan        | `string`  | !secret octopus_export_mpan |       `false`       | The MPAN of the Octopus export meter. Omit if there is no export                                                                                                                                  |
+| octopus_serial             | `string`  |   !secret octopus_serial    |       `false`       | The Octopus meter serial number                                                                                                                                                                   |
+| octopus_import_tariff_code | `string`  |                             |       `false`       | The Octopus import tariff code                                                                                                                                                                    |
+| octopus_export_tariff_code | `string`  |                             |       `false`       | The Octopus export tariff code. Omit if there is no export                                                                                                                                        |
 
-<h3>Plant Configuration Parameters *Incomplete*</h3
+<h3>Plant Configuration Parameters</h3
 
 All of these are required but will be defaulted if not specified\*.
 
 \* Not yet implemented
 
+| Name                        |   Type   | Default | Can Point to Entity | Description                            |
+| --------------------------- | :------: | :-----: | :-----------------: | -------------------------------------- |
+| battery_capacity_Wh         |  `int`   |  10000  |       `true`        | Installed battery capacity [Wh]        |
+| inverter_efficiency_percent |  `int`   |   93    |       `true`        | Inverter (DC->AC) efficiency [%]       |
+| charger_efficiency_percent  |  `int`   |   93    |       `true`        | Charger (AC->DC) efficiency [%]        |
+| charger_power_watts         |  `int`   |   200   |       `true`        | Charger power [W]                      |
+| maximum_dod_percent         |  `int`   |   15    |       `true`        | Battery maximum Depth of Discharge [%] |
+| battery_voltage             | `float`  |  52.0   |       `true`        | Nominal battery voltage [V]            |
+| entity_id_battery_soc:      | `string` |         |     `required`      | Entity that reports battery SOC        |
+
+<h3>Solar and Consumption Forecast Parameters</h3>
+
+| Name                   |   Type   |  Default  | Can Point to Entity | Description                                                                                                                                          |
+| ---------------------- | :------: | :-------: | :-----------------: | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| solar_forecast         | `string` | `Solcast` |       `true`        | Valid options are `Solcast` (Solcast mid-case), `Solcast_p90` (Solcast high), `Solcast_p10` (Solcast low), `Solcast_Swanson` (Solcast weighted mean) |
+| entity_id_consumption: | `string` |           |     `required`      | Entity that reports consumption                                                                                                                      |
+| consumption_days       |  `int`   |     7     |       `true`        | Number of days history to use                                                                                                                        |
+| consumption_grouping   | `string` |  `mean`   |       `true`        | Grouping method for consumption history: `mean`, `median`, `max`                                                                                     |
+
 <h3>Charging Time Parameters</h3>
 
-If `charge_auto_select` is `true` the remaining parameters will be detected automatically and can be omitted.
+If `charge_auto_select` is `true` the charge times will be detected automatically and can be omitted.
+
+| Name               |   Type    | Default | Can Point to Entity | Description                                                                                                   |
+| ------------------ | :-------: | :-----: | :-----------------: | ------------------------------------------------------------------------------------------------------------- |
+| charge_auto_select | `boolean` | `true`  |       `true`        | Controls whether to automatically detect optimum charge times (forced to `true` for Agile import tariffs)     |
+| charge_fixed_start |  `time`   |         |       `true`        | Fixed charging start time (UTC)                                                                               |
+| charge_fixed_end   |  `time`   |         |       `true`        | Fixed charging end time (UTC)                                                                                 |
+| default_target_soc |   `int`   |   100   |       `true`        | Default un-optimised target SOC. Charge current will be calculated for this SOC if `optimise_flag` is `false` |
+| optimise_flag:     | `boolean` | `true`  |       `true`        | Controls whether to optimise charging time and target SOC                                                     |
 
 <h2>Triggering the App</h2>
 

@@ -7,9 +7,9 @@ from math import ceil
 # %%
 # from json import dumps
 
-VERSION = "1.0.1"
+VERSION = "1.0.2"
 
-DEBUG = False
+DEBUG = True
 DEBUG_TIME_NOW = pd.Timestamp("2023-03-03 06:00:00+00:00")
 FAKE_AGILE_IMPORT = False
 FAKE_AGILE_DIFF = 50
@@ -67,7 +67,8 @@ class SolarOpt(hass.Hass):
                 except Exception as e:
                     pass
 
- #           self.log(f"Loaded parameter {key}: {self.params[key]} as a {type(self.params[key])}")
+            if DEBUG:
+                self.log(f"Loaded parameter {key}: {self.params[key]} as a {type(self.params[key])}")
 
     def mpan_sensor(self, tariff):
         mpan = self.params[f"octopus_{tariff}_mpan"]
@@ -84,31 +85,38 @@ class SolarOpt(hass.Hass):
 
         self.sensors = {}
 
-        # If the auto option is selected, try to get all the information automatically:
-        if self.params["octopus_auto"]:
-            self.log(f"Trying to auto detect Octopus tariffs")
-            current_rate_sensors = [
-                name
-                for name in self.get_state("sensor").keys()
-                if ("octopus_energy_electricity" in name and "current_rate" in name)
-            ]
-            sensors = {}
-            sensors["import"] = [x for x in current_rate_sensors if not "export" in x]
-            sensors["export"] = [x for x in current_rate_sensors if "export" in x]
-            for tariff in TARIFFS:
-                if sensors[tariff]:
-                    self.sensors[tariff] = sensors[tariff][0]
-                    self.params["octopus_serial"] = self.sensors[tariff].split("_")[3]
-                    self.params[f"octopus_{tariff}_mpan"] = self.sensors[tariff].split("_")[4]
-                    tariff_code = self.get_state(self.sensors[tariff], attribute="all")["attributes"]["rate"][
-                        "tariff_code"
-                    ]
-                    self.params[f"octopus_{tariff}_tariff_code"] = tariff_code
-                    self.log(f"Got {tariff.title()} sensor automatically. Tariff code: {tariff_code}")
+        if not self.params["manual_tariff"]:
+            # If the auto option is selected, try to get all the information automatically:
+            if self.params["octopus_auto"]:
+                if DEBUG:
+                    self.log(f"Trying to auto detect Octopus tariffs")
+                current_rate_sensors = [
+                    name
+                    for name in self.get_state("sensor").keys()
+                    if ("octopus_energy_electricity" in name and "current_rate" in name)
+                ]
+                sensors = {}
+                sensors["import"] = [x for x in current_rate_sensors if not "export" in x]
+                sensors["export"] = [x for x in current_rate_sensors if "export" in x]
+                for tariff in TARIFFS:
+                    if sensors[tariff]:
+                        self.sensors[tariff] = sensors[tariff][0]
+                        self.params["octopus_serial"] = self.sensors[tariff].split("_")[3]
+                        self.params[f"octopus_{tariff}_mpan"] = self.sensors[tariff].split("_")[4]
+                        tariff_code = self.get_state(self.sensors[tariff], attribute="all")["attributes"]["rate"][
+                            "tariff_code"
+                        ]
+                        self.params[f"octopus_{tariff}_tariff_code"] = tariff_code
+                        self.log(f"Got {tariff.title()} sensor automatically. Tariff code: {tariff_code}")
 
+            else:
+                if DEBUG:
+                    self.log(f"Loading Octopus tariffs from specified MPANs")
+                for tariff in TARIFFS:
+                    self.sensors[tariff] = self.mpan_sensor(tariff)
         else:
-            for tariff in TARIFFS:
-                self.sensors[tariff] = self.mpan_sensor(tariff)
+            if DEBUG:
+                self.log(f"Manual tariff specified. Not loading tariffs from Octopus integration.")
 
     def optimise(self, event_name, data, kwargs):
         self.log(f"********* SOLAR_OPT Event triggered **********")
@@ -131,7 +139,6 @@ class SolarOpt(hass.Hass):
         try:
             if not self.load_prices():
                 raise Exception
-
 
         except Exception as e:
             self.log(f"Unable to load price data: {e}")
@@ -396,40 +403,81 @@ class SolarOpt(hass.Hass):
 
     def load_prices(self):
         try:
-            for tariff in TARIFFS:
-                sensor = self.sensors[tariff]
-                self.log(f"{tariff.title()} sensor: {sensor}")
+            if self.params["manual_tariff"]:
+                if DEBUG:
+                    self.log("Loading manual tariffs")
 
-                try:
-                    # Read the price from the Octopus sensor attribute and convert to a DataFrame
-                    prices = self.get_state(sensor, attribute="all")["attributes"]["rates"]
+                for tariff in TARIFFS:
+                    valid_prices = {}
+                    # Get all the import prices
+                    prices = [x for x in self.params.keys() if f"{tariff}_tariff" in x and "price" in x]
+                    if DEBUG:
+                        self.log(f"{tariff.title()}: {prices}")
 
-                except Exception as e:
-                    self.log(f"Attributes unavailable for sensor: {sensor}")
-                    self.log(f"No {tariff} price data available: {e}")
+                    # If there is only one price then set it for the entire period
+                    if len(prices) == 1:
+                        self.df[tariff] = self.params[prices[0]]
 
-                df = pd.DataFrame(prices)
-                df = df.set_index("from")["rate"]
+                    else:
+                        for price in prices:
+                            start_time = price.replace("price", "start")
+                            # Check there is a starttime for the price
+                            if price in self.params.keys():
+                                # Add an entry for yestersday, today and tomorrow at the price
+                                for days in range(-1, 2):
+                                    valid_prices[
+                                        pd.Timestamp(self.params[start_time]).tz_localize("UTC")
+                                        + pd.Timedelta(days=days)
+                                    ] = self.params[price]
+                        # Sort the dict
+                        valid_prices = dict(sorted(valid_prices.items()))
+                        if DEBUG:
+                            self.log(f"Valid Imports: {valid_prices}")
 
-                # Convert the index to datetime
-                df.index = pd.to_datetime(df.index)
+                        for start_datetime in valid_prices:
+                            self.df.loc[self.df.index >= start_datetime, tariff] = valid_prices[start_datetime]
 
-                # If it's only today's data pad it out assuming tomorrow = today
-                if len(df) < 94:
-                    dfx = df.copy()
-                    dfx.index = dfx.index + pd.Timedelta("1D")
-                    df = pd.concat([df, dfx])
+                    if DEBUG:
+                        self.log(self.df[tariff])
 
-                # Fill andy missing data (after 23:00) with the 22:30 data
-                self.df[tariff] = df
-                self.df[tariff].fillna(self.df[tariff].dropna()[-1], inplace=True)
+            else:
+                if DEBUG:
+                    self.log("Loading sensor-based tariffs")
 
-                self.log(f"** {tariff.title()} tariff price data loaded OK **")
+                for tariff in TARIFFS:
+                    sensor = self.sensors[tariff]
+                    self.log(f"{tariff.title()} sensor: {sensor}")
 
-            # DEBUG
-            if FAKE_AGILE_IMPORT:
-                self.df["import"] = self.df["export"] + FAKE_AGILE_DIFF
-                self.params["octopus_import_tariff_code"] = "FAKE_AGILE"
+                    try:
+                        # Read the price from the Octopus sensor attribute and convert to a DataFrame
+                        prices = self.get_state(sensor, attribute="all")["attributes"]["rates"]
+
+                    except Exception as e:
+                        self.log(f"Attributes unavailable for sensor: {sensor}")
+                        self.log(f"No {tariff} price data available: {e}")
+
+                    df = pd.DataFrame(prices)
+                    df = df.set_index("from")["rate"]
+
+                    # Convert the index to datetime
+                    df.index = pd.to_datetime(df.index)
+
+                    # If it's only today's data pad it out assuming tomorrow = today
+                    if len(df) < 94:
+                        dfx = df.copy()
+                        dfx.index = dfx.index + pd.Timedelta("1D")
+                        df = pd.concat([df, dfx])
+
+                    # Fill andy missing data (after 23:00) with the 22:30 data
+                    self.df[tariff] = df
+                    self.df[tariff].fillna(self.df[tariff].dropna()[-1], inplace=True)
+
+                    self.log(f"** {tariff.title()} tariff price data loaded OK **")
+
+                # DEBUG
+                if FAKE_AGILE_IMPORT:
+                    self.df["import"] = self.df["export"] + FAKE_AGILE_DIFF
+                    self.params["octopus_import_tariff_code"] = "FAKE_AGILE"
 
             return True
 
@@ -482,10 +530,12 @@ class SolarOpt(hass.Hass):
         try:
             # df = pd.DataFrame(hist[0]).set_index("last_updated")["state"]
             df.index = pd.to_datetime(df.index)
-            df = pd.to_numeric(df, errors="coerce").dropna().resample("30T").mean() * -1
+            df = pd.to_numeric(df, errors="coerce").dropna().resample("30T").mean()
+            if DEBUG:
+                self.log(f"Consumption: {df.to_dict()}")
 
             # Group by time and take the mean
-            df = df.groupby(df.index.time).mean()
+            df = df.groupby(df.index.time).aggregate(self.params["consumption_grouping"]) * -1
             df.name = "consumption"
 
             self.df["time"] = self.df.index.time
@@ -498,3 +548,6 @@ class SolarOpt(hass.Hass):
         except Exception as e:
             self.log(f"Error loading consumption data: {e}")
             return False
+
+
+# %%
