@@ -7,7 +7,7 @@ from math import ceil
 # %%
 # from json import dumps
 
-VERSION = "1.1.0"
+VERSION = "1.1.1"
 
 DEBUG = True
 DEBUG_TIME_NOW = pd.Timestamp("2023-03-03 06:00:00+00:00")
@@ -42,19 +42,36 @@ class SolarOpt(hass.Hass):
         self.set_default_params()
         self.load_args()
         self.load_tariffs()
-        self.listen_event(self.optimise, "SOLAR_OPT")
+        # Optimise on an EVENT trigger:
+        self.listen_event(self.optimise_event, "SOLAR_OPT")
+        # Optimise when the Solcast forecast changes:
+        self.listen_state(self.optimise_state_change, SOLCAST_ENTITY_TODAY)
         self.log(f"************ SolarOpt Initialised ************")
+        self.optimise()
         self.log(f"******** Waiting for SOLAR_OPT Event *********")
 
     def set_default_params(self):
         self.params = {}
 
-    def load_args(self):
-        for key in self.args.keys():
+    def load_args(self, keys=None):
+        self.pointers = []
+        if keys is None:
+            keys = self.args.keys()
+        if DEBUG:
+            self.log(self.args)
+        for key in keys:
             # Attempt to read entity states for all string paramters unless they start with"entity_id":
             if isinstance(self.args[key], str) and self.entity_exists(self.args[key]) and (key[:9] != "entity_id"):
                 self.params[key] = self.get_state(self.args[key])
+                # If these entities are inputs and they change then we need to trigger automatically
+                if "input" in self.args[key]:
+                    self.listen_state(self.optimise_state_change, self.args[key])
+
             else:
+                for x in ["sensor", "input"]:
+                    if x in self.args[key] and not self.entity_exists(self.args[key]):
+                        self.log(f"WARNING: {self.args[key]} does not resolve to a valid entity")
+
                 self.params[key] = self.args[key]
 
             # Try to coerce it to an int
@@ -65,7 +82,9 @@ class SolarOpt(hass.Hass):
                 try:
                     self.params[key] = float(self.params[key])
                 except Exception as e:
-                    pass
+                    # Can't coerce from on/off to boolean so manually do this
+                    if self.params[key] in ["on", "off"]:
+                        self.params[key] = self.params[key] == "on"
 
             if DEBUG:
                 self.log(f"Loaded parameter {key}: {self.params[key]} as a {type(self.params[key])}")
@@ -118,16 +137,28 @@ class SolarOpt(hass.Hass):
             if DEBUG:
                 self.log(f"Manual tariff specified. Not loading tariffs from Octopus integration.")
 
-    def optimise(self, event_name, data, kwargs):
-        self.log(f"********* SOLAR_OPT Event triggered **********")
+    def optimise_state_change(self, entity, attribute, old, new, kwargs):
+        self.log(f"*********  State change triggered **********")
+        self.log(f"Entity: {entity}")
+        self.log(f"From: {old}")
+        self.log(f"To: {new}")
 
+        # Update the params
+        self.load_args([k for k, v in self.args.items() if v == entity])
+        self.optimise()
+
+    def optimise_event(self, event_name, data, kwargs):
+        self.log(f"********* {event_name} Event triggered **********")
+        self.optimise()
+
+    def optimise(self):
         # initialse a DataFrame to cover today and tomorrow at 30 minute frequency
         self.df = pd.DataFrame(
             index=pd.date_range(
                 pd.Timestamp.now().tz_localize("UTC").normalize(),
                 pd.Timestamp.now().tz_localize("UTC").normalize() + pd.Timedelta(days=2),
                 freq="30T",
-                closed="left",
+                inclusive="left",
             ),
             data={"import": 0, "export": 0},
         )
@@ -171,9 +202,11 @@ class SolarOpt(hass.Hass):
         self.log(f"Net cost (no optimisation): GBP{self.df['net_cost'].sum():5.2f}")
 
         if self.params["optimise_flag"]:
+            self.log("Optimising target SOC")
             soc_range = list(range(int(ceil(self.params["maximum_dod_percent"] / 5) * 5), 101, 5))
         else:
             soc_range = [int(float(self.params["default_target_soc"]))]
+            self.log(f"Using default target SOC of {soc_range[0]}%")
 
         nc = []
         for target_soc in soc_range:
@@ -210,8 +243,7 @@ class SolarOpt(hass.Hass):
                 "raw_soc": self.df[["period_start", "soc0"]]
                 .set_axis(["period_start", "soc"], axis=1)
                 .to_dict("records"),
-                #                    "charge_period_start": self.charge_start_datetime,
-                #                    "charge_period_end": self.charge_end_datetime,
+                "consumption": (self.df[["period_start", "consumption"]]).to_dict("records"),
             },
         )
 
@@ -482,6 +514,8 @@ class SolarOpt(hass.Hass):
             return True
 
         except Exception as e:
+            if DEBUG:
+                self.log(f"Error loading price data: {e}")
             return False
 
     def load_solcast(self):
@@ -531,8 +565,6 @@ class SolarOpt(hass.Hass):
             # df = pd.DataFrame(hist[0]).set_index("last_updated")["state"]
             df.index = pd.to_datetime(df.index)
             df = pd.to_numeric(df, errors="coerce").dropna().resample("30T").mean()
-            if DEBUG:
-                self.log(f"Consumption: {df.to_dict()}")
 
             # Group by time and take the mean
             df = df.groupby(df.index.time).aggregate(self.params["consumption_grouping"]) * -1

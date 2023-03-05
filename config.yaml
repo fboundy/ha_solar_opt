@@ -1,4 +1,4 @@
-# v1.1.0
+# v1.1.1
 solar_opt:
   module: solar_opt
   class: SolarOpt
@@ -25,7 +25,7 @@ solar_opt:
   # ========================================
 
   # If true the app will attempt to detect your tariff details automatcally
-  octopus_auto: false
+  octopus_auto: true
 
   # The following Can be omitted if Auto is working correctly
   octopus_import_mpan: !secret octopus_import_mpan
@@ -41,7 +41,7 @@ solar_opt:
   # All parameters can be a number or point to an entity UNLESS they start with 'entity_id'. All of
   # these are required but will be defaulted if not specified
 
-  battery_capacity_Wh: 10000 # Default: 10000
+  battery_capacity_Wh: input_number.solis_battery_capacity # Default: 10000
   inverter_efficiency_percent: 93                           # Default: 93
   charger_efficiency_percent: 93                            # Default: 93
   maximum_dod_percent: sensor.solis_overdischarge_soc       # Default: 20
@@ -67,7 +67,7 @@ solar_opt:
   # consumption estimation
   entity_id_consumption: sensor.solis_total_load_power
   consumption_history_days: 7
-  consumption_grouping: max
+  consumption_grouping: mean
 
   # ========================================
   # Charging time parameters:
@@ -80,5 +80,5 @@ solar_opt:
   # If auto is false these fixed times will be used
   charge_fixed_start: 00:30
   charge_fixed_end: 07:30
-  default_target_soc: 100                       # Default un-optimised target SOC
+  default_target_soc: input_number.eco7_target_soc                      # Default un-optimised target SOC
   optimise_flag: input_boolean.solis_eco7_opt
