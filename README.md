@@ -224,3 +224,5 @@ At present the user defines an entity which contains consumption data. This is t
 It definitely works with Agile Export. Agile import is more challenging as the optimum charging slot is not fixed. I haven't been able to test Agile Import fully yet.
 
 <h2>Plotting Output and Input Data *Incomplete*</h2>
+
+`solar_opt_apex_charts.yaml` can be used to plot the output using [Apex Charts](https://github.com/RomRider/apexcharts-card)
