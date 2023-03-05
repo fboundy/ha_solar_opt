@@ -132,8 +132,9 @@ class SolarOpt(hass.Hass):
             if not self.load_prices():
                 raise Exception
 
+
         except Exception as e:
-            self.log(f"Unable to load price data": {e})
+            self.log(f"Unable to load price data: {e}")
             return False
 
         # Load Solcast
@@ -145,13 +146,13 @@ class SolarOpt(hass.Hass):
             self.log(f"Unable to load solar forecast: {e}")
             return False
 
-        # Load the expected load
+        # Load the expected consumption
         try:
-            if not self.load_load():
+            if not self.load_consumption():
                 raise Exception
 
         except Exception as e:
-            self.log(f"Unable to load estimated load: {e}")
+            self.log(f"Unable to load estimated consumption: {e}")
             return False
 
         # Calculate when the next charging slot is
@@ -338,10 +339,10 @@ class SolarOpt(hass.Hass):
 
         self.df["net_cost"] = 0
         self.df["soc"] = 0
-        self.df["ref_cost"] = -self.df["load"] * self.df["import"] / 100 / 1000 * self.freq
+        self.df["ref_cost"] = -self.df["consumption"] * self.df["import"] / 100 / 1000 * self.freq
 
         for source in weights:
-            battery_flows = self.df[source] + self.df["load"]
+            battery_flows = self.df[source] + self.df["consumption"]
             if target_soc is not None:
                 hours = (self.charge_end_datetime - self.charge_start_datetime).seconds / 3600
                 target_chg = target_soc * self.params["battery_capacity_Wh"] / 100
@@ -378,7 +379,7 @@ class SolarOpt(hass.Hass):
             self.df.loc[self.df["battery_flow"] < 0, "battery_flow"] = (
                 self.df["battery_flow"] / self.params["charger_efficiency_percent"] * 100
             )
-            self.df["grid_flow"] = -(self.df[source] + self.df["load"] + self.df["battery_flow"]).round(2)
+            self.df["grid_flow"] = -(self.df[source] + self.df["consumption"] + self.df["battery_flow"]).round(2)
 
             self.df["net_cost"] += (
                 (self.df["import"] * self.df["grid_flow"]).clip(0) / 100 / 1000 * self.freq * weights[source]
@@ -466,15 +467,15 @@ class SolarOpt(hass.Hass):
             self.log(f"Error loading Solcast: {e}")
             return False
 
-    def load_load(self):
-        self.log("Getting expected load data")
+    def load_consumption(self):
+        self.log("Getting expected consumption data")
 
         try:
             # load history fot the last N days from the specified sensor
-            df = self.hass2df(self.params["entity_id_load"], days=int(self.params["load_history_days"]))
+            df = self.hass2df(self.params["entity_id_consumption"], days=int(self.params["consumption_history_days"]))
 
         except Exception as e:
-            self.log(f"Unable to get historical Load from {self.params['entity_id_load']}")
+            self.log(f"Unable to get historical consumption from {self.params['entity_id_consumption']}")
             self.log(f"Error: {e}")
             return False
 
@@ -485,15 +486,15 @@ class SolarOpt(hass.Hass):
 
             # Group by time and take the mean
             df = df.groupby(df.index.time).mean()
-            df.name = "load"
+            df.name = "consumption"
 
             self.df["time"] = self.df.index.time
             self.df = self.df.merge(df, "left", left_on="time", right_index=True)
 
             self.df = self.df[self.df.index >= pd.Timestamp.now().tz_localize("UTC") - pd.Timedelta("30T")]
-            self.log("** Estimated load loaded OK **")
+            self.log("** Estimated consumption loaded OK **")
             return True
 
         except Exception as e:
-            self.log(f"Error loading load data: {e}")
+            self.log(f"Error loading consumption data: {e}")
             return False
