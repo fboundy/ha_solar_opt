@@ -1,0 +1,176 @@
+type: vertical-stack
+cards:
+  - type: custom:apexcharts-card
+    header:
+      show: true
+      show_states: true
+      colorize_states: true
+      title: Solar Forecasts vs Actual
+    graph_span: 2d
+    stacked: false
+    span:
+      start: day
+    series:
+      - entity: sensor.solis_inverter_dc_power
+        extend_to: now
+        name: Actual
+        stroke_width: 1
+        type: column
+        color: '#ff7f00'
+        group_by:
+          func: avg
+          duration: 30min
+        offset: +15min
+      - entity: sensor.solaropt_optimised_target_soc
+        type: line
+        name: Forecast Consumption
+        color: yellow
+        opacity: 0.7
+        stroke_width: 2
+        unit: '%'
+        show:
+          in_header: false
+          legend_value: false
+        data_generator: |
+          return entity.attributes.consumption.map((entry) => {
+             return [new Date(entry.period_start), entry.consumption*-1];
+           });    
+      - entity: sensor.solcast_forecast_today
+        type: area
+        name: ''
+        color: cyan
+        opacity: 0.1
+        stroke_width: 0
+        unit: W
+        show:
+          in_header: false
+          legend_value: false
+        data_generator: |
+          return entity.attributes.detailedForecast.map((entry) => {
+             return [new Date(entry.period_start), entry.pv_estimate90*2000];
+           });
+        offset: +15min
+      - entity: sensor.solcast_forecast_today
+        type: area
+        name: ' '
+        color: '#1c1c1c'
+        opacity: 1
+        stroke_width: 0
+        unit: W
+        show:
+          in_header: false
+          legend_value: false
+        data_generator: |
+          return entity.attributes.detailedForecast.map((entry) => {
+             return [new Date(entry.period_start), entry.pv_estimate10*2000];
+           });
+        offset: +15min
+      - entity: sensor.solcast_forecast_today
+        type: line
+        name: Solcast
+        color: cyan
+        opacity: 1
+        stroke_width: 3
+        unit: W
+        show:
+          in_header: false
+          legend_value: false
+        data_generator: |
+          return entity.attributes.detailedForecast.map((entry) => {
+             return [new Date(entry.period_start), entry.pv_estimate*2000];
+           });
+        offset: +15min
+      - entity: sensor.solcast_forecast_tomorrow
+        type: area
+        name: Solcast
+        color: cyan
+        opacity: 0.1
+        stroke_width: 0
+        unit: W
+        show:
+          in_header: false
+          legend_value: false
+        data_generator: |
+          return entity.attributes.detailedForecast.map((entry) => {
+             return [new Date(entry.period_start), entry.pv_estimate90*2000];
+           });
+        offset: +15min
+      - entity: sensor.solcast_forecast_tomorrow
+        type: area
+        name: Solcast
+        color: '#1c1c1c'
+        opacity: 1
+        stroke_width: 0
+        unit: W
+        show:
+          in_header: false
+          legend_value: false
+        data_generator: |
+          return entity.attributes.detailedForecast.map((entry) => {
+             return [new Date(entry.period_start), entry.pv_estimate10*2000];
+           });
+        offset: +15min
+      - entity: sensor.solcast_forecast_tomorrow
+        type: line
+        name: Solcast
+        color: cyan
+        opacity: 1
+        stroke_width: 3
+        unit: W
+        show:
+          in_header: false
+          legend_value: false
+        data_generator: |
+          return entity.attributes.detailedForecast.map((entry) => {
+             return [new Date(entry.period_start), entry.pv_estimate*2000];
+           });
+        offset: +15min
+  - type: custom:apexcharts-card
+    header:
+      show: true
+      show_states: true
+      colorize_states: true
+      title: Battery SOC Forecast vs Actual
+    graph_span: 2d
+    span:
+      start: day
+    series:
+      - entity: sensor.solis_battery_soc
+        extend_to: now
+        name: Actual
+        stroke_width: 1
+        type: area
+        color: '#ff7f00'
+        opacity: 0.4
+      - entity: sensor.solaropt_optimised_target_soc
+        type: line
+        name: Optimised
+        color: '#7f7fff'
+        opacity: 0.7
+        stroke_width: 2
+        unit: '%'
+        show:
+          in_header: false
+          legend_value: false
+        data_generator: |
+          return entity.attributes.optimised_soc.map((entry) => {
+             return [new Date(entry.period_start), entry.soc];
+           });
+      - entity: sensor.solaropt_optimised_target_soc
+        type: line
+        name: Initial
+        color: '#7fff7f'
+        opacity: 0.7
+        stroke_width: 2
+        unit: '%'
+        show:
+          in_header: false
+          legend_value: false
+        data_generator: |
+          return entity.attributes.raw_soc.map((entry) => {
+             return [new Date(entry.period_start), entry.soc];
+           });
+      - entity: sensor.solaropt_optimised_target_soc
+        show:
+          in_header: true
+          in_chart: false
