@@ -226,4 +226,4 @@ It definitely works with Agile Export. Agile import is more challenging as the o
 
 `solar_opt_apex_charts.yaml` can be used to plot the output using [Apex Charts](https://github.com/RomRider/apexcharts-card)
 
-[!apex_charts.png]
+[![](https://github.com/fboundy/ha_solar_opt/blob/main/apex_charts.png)](https://my.home-assistant.io/redirect/supervisor_addon/?addon=a0d7b954_appdaemon&repository_url=https%3A%2F%2Fgithub.com%2Fhassio-addons%2Frepository)
