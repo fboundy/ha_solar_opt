@@ -1,4 +1,4 @@
-# v1.1.3
+# v1.1.4
 solar_opt:
   module: solar_opt
   class: SolarOpt
@@ -18,7 +18,8 @@ solar_opt:
   import_tariff_1_start: input_datetime.economy_7_start
   import_tariff_2_price: input_number.electricity_tariff_peak
   import_tariff_2_start: 07:30
-  # export_tariff_1_price: 15.00
+  export_tariff_1_price: 15.00
+  dst_time_shift: false
   
   # ========================================
   # Octopus account parameters
@@ -82,3 +83,4 @@ solar_opt:
   charge_fixed_end: 07:30
   default_target_soc: input_number.eco7_target_soc                      # Default un-optimised target SOC
   optimise_flag: input_boolean.solis_eco7_opt
+

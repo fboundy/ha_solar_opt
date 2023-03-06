@@ -1,15 +1,18 @@
 # %%
 import appdaemon.plugins.hass.hassapi as hass
-import mqttapi as mqtt
+
+# import mqttapi as mqtt
 import pandas as pd
 from math import ceil
 
 # %%
 # from json import dumps
 
-VERSION = "1.1.3"
+VERSION = "1.1.4"
 
 DEBUG = True
+DEBUG_PARAMS = False
+FIX_TIME = False
 DEBUG_TIME_NOW = pd.Timestamp("2023-03-03 06:00:00+00:00")
 FAKE_AGILE_IMPORT = False
 FAKE_AGILE_DIFF = 50
@@ -87,8 +90,15 @@ class SolarOpt(hass.Hass):
                     if self.params[key] in ["on", "off"]:
                         self.params[key] = self.params[key] == "on"
 
-            if DEBUG:
+            if DEBUG and DEBUG_PARAMS:
                 self.log(f"Loaded parameter {key}: {self.params[key]} as a {type(self.params[key])}")
+
+        if self.params["dst_time_shift"]:
+            self.tz = "Europe/London"
+        else:
+            self.tz = "UTC"
+        if DEBUG:
+            self.log(f"Timezone set to {self.tz}")
 
     def mpan_sensor(self, tariff):
         mpan = self.params[f"octopus_{tariff}_mpan"]
@@ -158,8 +168,8 @@ class SolarOpt(hass.Hass):
         # initialse a DataFrame to cover today and tomorrow at 30 minute frequency
         self.df = pd.DataFrame(
             index=pd.date_range(
-                pd.Timestamp.now().tz_localize("UTC").normalize(),
-                pd.Timestamp.now().tz_localize("UTC").normalize() + pd.Timedelta(days=2),
+                pd.Timestamp.now().tz_localize(self.tz).normalize(),
+                pd.Timestamp.now().tz_localize(self.tz).normalize() + pd.Timedelta(days=2),
                 freq="30T",
                 inclusive="left",
             ),
@@ -280,11 +290,13 @@ class SolarOpt(hass.Hass):
         )
 
     def calc_charging_slot(self):
-        time_now = pd.Timestamp.now().tz_localize("UTC")
-        if DEBUG:
+        time_now = pd.Timestamp.now().tz_localize(self.tz)
+        if FIX_TIME:
             time_now = DEBUG_TIME_NOW
 
         if bool(self.params["charge_auto_select"]):
+            if DEBUG:
+                self.log("Auto-detecting charge times")
             if not "AGILE" in self.params["octopus_import_tariff_code"]:
                 # Fixed time slot calculation
                 night_rate = self.df["import"].min()
@@ -295,9 +307,26 @@ class SolarOpt(hass.Hass):
                 ].index[0]
                 # if we are in the slot then set the slot start to now:
                 self.charge_start_datetime = max([time_now, self.charge_start_datetime])
-                self.charge_end_datetime = self.df[
-                    (self.df["import"] != night_rate) & (self.df.index >= self.charge_start_datetime)
-                ].index[0]
+                if len(self.df[(self.df["import"] != night_rate) & (self.df.index >= self.charge_start_datetime)]) > 0:
+                    self.charge_end_datetime = self.df[
+                        (self.df["import"] != night_rate) & (self.df.index >= self.charge_start_datetime)
+                    ].index[0]
+
+                else:
+                    # this implies it's a single rate so set the arbitrarily set start and end to 00:30 (or now) and
+                    # the next 07:30 and issue a warning that optimisation is impossible
+
+                    # Set end time to 07:30 today
+                    self.charge_end_datetime = pd.Timestamp("07:30").tz_localize(self.tz)
+
+                    # If it's after 07:30 shift forwards a day
+                    if time_now > self.charge_end_datetime:
+                        self.charge_end_datetime += pd.Timedelta("1D")
+
+                    # Start time is the 00:30 before the end time or now, whichever is greater:
+                    self.charge_start_datetime = max([self.charge_end_datetime - pd.Timedelta("7H"), time_now])
+
+                    self.log("WARNING: Only one import tariff rate detected. Charge optimisation will not be possible.")
 
             else:
                 # TO-DO:
@@ -364,6 +393,22 @@ class SolarOpt(hass.Hass):
                     self.charge_start_datetime = time_now
 
                 self.charge_end_datetime = self.charge_start_datetime + pd.Timedelta(minutes=slots_required * 30)
+        else:
+            if DEBUG:
+                self.log("Using manual charge times")
+            # Set end time to 07:30 today
+            self.charge_end_datetime = pd.Timestamp(self.params["charge_fixed_end"]).tz_localize(self.tz)
+            self.charge_start_datetime = pd.Timestamp(self.params["charge_fixed_start"]).tz_localize(self.tz)
+
+            # If it's after end_time shift forwards a day
+            if time_now > self.charge_end_datetime:
+                if DEBUG:
+                    self.log("Shifting charge times one day forward")
+                self.charge_end_datetime += pd.Timedelta("1D")
+                self.charge_start_datetime += pd.Timedelta("1D")
+
+            # Start time is the 00:30 before the end time or now, whichever is greater:
+            self.charge_start_datetime = max([self.charge_start_datetime, time_now])
 
         self.report_datetime = self.charge_end_datetime.normalize() + pd.Timedelta("1D")
         self.df = self.df[self.df.index < self.report_datetime]
@@ -463,7 +508,7 @@ class SolarOpt(hass.Hass):
                                 # Add an entry for yestersday, today and tomorrow at the price
                                 for days in range(-1, 2):
                                     valid_prices[
-                                        pd.Timestamp(self.params[start_time]).tz_localize("UTC")
+                                        pd.Timestamp(self.params[start_time]).tz_localize(self.tz)
                                         + pd.Timedelta(days=days)
                                     ] = self.params[price]
                         # Sort the dict
@@ -582,7 +627,7 @@ class SolarOpt(hass.Hass):
             self.df["time"] = self.df.index.time
             self.df = self.df.merge(df, "left", left_on="time", right_index=True)
 
-            self.df = self.df[self.df.index >= pd.Timestamp.now().tz_localize("UTC") - pd.Timedelta("30T")]
+            self.df = self.df[self.df.index >= pd.Timestamp.now().tz_localize(self.tz) - pd.Timedelta("30T")]
             self.log("** Estimated consumption loaded OK **")
             return True
 

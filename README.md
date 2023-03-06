@@ -2,7 +2,7 @@
 
 Solar / Battery Charging Optimisation for Home Assistant
 
-<h2>Pre-Release v1.1.3</h2>
+<h2>Pre-Release v1.1.4</h2>
 
 Initial pre-release. Quite probably full of un-documented features....
 
@@ -87,14 +87,15 @@ All configuration is done by editing the parameters in the `/config/appdaemon/ap
 
 These are all required if `manual_tariff` is `true`. Any number of import or export time periods can be specified using sequential suffixes `_1`, `_2` etc. Each time period must have a start time and a price. Any periods with one and not the other will be ignored.
 
-| Name                  |  Type   | Default | Can Point to Entity | Description                                |
-| --------------------- | :-----: | :-----: | :-----------------: | ------------------------------------------ |
-| import_tariff_1_price | `float` |         |       `true`        | Import prices p/kWh for Import Time Slot 1 |
-| import_tariff_1_start | `time`  |         |       `true`        | Start time (UTC) for Import Time Slot 1    |
-| import_tariff_2_price | `float` |         |       `true`        | Import prices p/kWh for Import Time Slot 2 |
-| import_tariff_2_start | `time`  |         |       `true`        | Start time (UTC) for Import Time Slot 2    |
-| export_tariff_1_price | `float` |         |       `true`        | Export prices p/kWh for Export Time Slot 1 |
-| export_tariff_1_start | `time`  |         |       `true`        | Start time (UTC) for Export Time Slot 1    |
+| Name                  |   Type    | Default | Can Point to Entity | Description                                                    |
+| --------------------- | :-------: | :-----: | :-----------------: | -------------------------------------------------------------- |
+| import_tariff_1_price |  `float`  |         |       `true`        | Import prices p/kWh for Import Time Slot 1                     |
+| import_tariff_1_start |  `time`   |         |       `true`        | Start time for Import Time Slot 1                              |
+| import_tariff_2_price |  `float`  |         |       `true`        | Import prices p/kWh for Import Time Slot 2                     |
+| import_tariff_2_start |  `time`   |         |       `true`        | Start time for Import Time Slot 2                              |
+| export_tariff_1_price |  `float`  |         |       `true`        | Export prices p/kWh for Export Time Slot 1                     |
+| export_tariff_1_start |  `time`   |         |       `true`        | Start time for Export Time Slot 1                              |
+| dst_time_shift        | `boolean` | `false` |       `true`        | Controls whether times will shift with DST or are fixed in UTC |
 
 <h3>Octopus Account Parameters</h3>
 
