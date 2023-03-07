@@ -2,7 +2,7 @@
 
 Solar / Battery Charging Optimisation for Home Assistant
 
-<h2>Pre-Release v1.1.4</h2>
+<h2>Pre-Release v1.1.5</h2>
 
 Initial pre-release. Quite probably full of un-documented features....
 
@@ -128,12 +128,14 @@ All of these are required but will be defaulted if not specified\*.
 
 <h3>Solar and Consumption Forecast Parameters</h3>
 
-| Name                   |   Type   |  Default  | Can Point to Entity | Description                                                                                                                                          |
-| ---------------------- | :------: | :-------: | :-----------------: | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| solar_forecast         | `string` | `Solcast` |       `true`        | Valid options are `Solcast` (Solcast mid-case), `Solcast_p90` (Solcast high), `Solcast_p10` (Solcast low), `Solcast_Swanson` (Solcast weighted mean) |
-| entity_id_consumption: | `string` |           |     `required`      | Entity that reports consumption                                                                                                                      |
-| consumption_days       |  `int`   |     7     |       `true`        | Number of days history to use                                                                                                                        |
-| consumption_grouping   | `string` |  `mean`   |       `true`        | Grouping method for consumption history: `mean`, `median`, `max`                                                                                     |
+| Name                    |   Type    |  Default  | Can Point to Entity | Description                                                                                                                                                                    |
+| ----------------------- | :-------: | :-------: | :-----------------: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| solar_forecast          | `string`  | `Solcast` |       `true`        | Valid options are `Solcast` (Solcast mid-case), `Solcast_p90` (Solcast high), `Solcast_p10` (Solcast low), `Solcast Swanson` (Solcast weighted mean)                           |
+| consumption_from_entity | `boolean` |  `true`   |       `true`        | Controls whether to use an entity to get historic consumption (`true`) or to use a model of typical consumption vs time together with an estimated daily consumption (`false`) |
+| entity_id_consumption:  | `string`  |           |     `required`      | Entity that reports consumption                                                                                                                                                |
+| consumption_days        |   `int`   |     7     |       `true`        | Number of days history to use                                                                                                                                                  |
+| consumption_grouping    | `string`  |  `mean`   |       `true`        | Grouping method for consumption history: `mean`, `median`, `max`                                                                                                               |
+| daily_consumption_Wh    |   `int`   |   11000   |       `true`        | Estimated daily consumption: only required if `consumption_from_entity` is `false`                                                                                             |
 
 <h3>Charging Time Parameters</h3>
 
@@ -217,7 +219,11 @@ The safest option is therefore to use `Solcast_p10`. However if the sun delivers
 
 <h3>Where Does the Forecast Consumption Come From?</h3>
 
-At present the user defines an entity which contains consumption data. This is then averaged on a half-hourly basis over a given number of days. This is probably one of the big uncertainties in the forecast. Suggested improvements are welcome.
+There are two options which are controled by the `consumption_from_entity` flag:
+
+If this paramter is `true` the user defines an entity which contains consumption data. This is then averaged on a half-hourly basis over a given number of days. This is probably one of the big uncertainties in the forecast. Suggested improvements are welcome.
+
+If it is `false` then an estimate of daily consumpion in Wh is combined with a typical daily profile ([source](https://www.researchgate.net/publication/324141791_The_potential_for_peak_shaving_on_low_voltage_distribution_networks_using_electricity_storage/download)) to genrate a simulated load vs time. Use this option if you don't hava a suitable entity in Home Assistant which captures your load.
 
 <h3>Does It Work With Agile?</h3>
 

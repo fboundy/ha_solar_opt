@@ -1,9 +1,10 @@
-# v1.1.4
+# v1.1.5
 solar_opt:
   module: solar_opt
   class: SolarOpt
 
   manual_tariff: false
+
   # ========================================
   # Manual Tariffs
   # ========================================
@@ -59,16 +60,19 @@ solar_opt:
   # Solcast         - the Solcast mid-case forecast [Default]
   # Solcast_p90     - the Solcast high estimate
   # Solcast_p10     - the Solcast high estimate
-  # Solcast_Swanson - uses the Swanson's mean of the cashflows from the above (Recommended)
+  # Solcast Swanson - uses the Swanson's mean of the cashflows from the above (Recommended)
   # 
   # Set this using an "input_select" helper and it can be varied on the fly
 
   solar_forecast: input_select.solar_forecast_source
 
   # consumption estimation
+  consumption_from_entity: false
   entity_id_consumption: sensor.solis_total_load_power
   consumption_history_days: 7
   consumption_grouping: mean
+  daily_consumption_Wh: 17000
+  
 
   # ========================================
   # Charging time parameters:

@@ -8,9 +8,9 @@ from math import ceil
 # %%
 # from json import dumps
 
-VERSION = "1.1.4"
+VERSION = "1.1.5"
 
-DEBUG = True
+DEBUG = False
 DEBUG_PARAMS = False
 FIX_TIME = False
 DEBUG_TIME_NOW = pd.Timestamp("2023-03-03 06:00:00+00:00")
@@ -39,10 +39,29 @@ class SolarOpt(hass.Hass):
         return df
 
     def initialize(self):
+        self.params = {
+            "manual_tariff": False,
+            "dst_time_shift": False,
+            "octopus_auto": True,
+            "battery_capacity_Wh": 10000,
+            "inverter_efficiency_percent": 93,
+            "charger_efficiency_percent": 93,
+            "maximum_dod_percent": 15,
+            "charger_power_watts": 3000,
+            "battery_voltage": 50,
+            "entity_id_battery_soc": "sensor.solis_battery_soc",
+            "solar_forecast": "Solcast Swanson",
+            "entity_id_consumption": "sensor.solis_total_load_power",
+            "consumption_history_days": 7,
+            "consumption_grouping": "mean",
+            "charge_auto_select": True,
+            "default_target_soc": 100,
+            "optimise_flag": True,
+        }
+
         self.log(f"*************** SolarOpt v{VERSION} ***************")
         self.adapi = self.get_ad_api()
-        self.mqtt = self.get_plugin_api("MQTT")
-        self.set_default_params()
+        # # self.mqtt = self.get_plugin_api("MQTT")
         self.load_args()
         self.load_tariffs()
         # Optimise on an EVENT trigger:
@@ -50,11 +69,8 @@ class SolarOpt(hass.Hass):
         # Optimise when the Solcast forecast changes:
         self.listen_state(self.optimise_state_change, SOLCAST_ENTITY_TODAY)
         self.log(f"************ SolarOpt Initialised ************")
-        self.optimise()
+        # self.optimise()
         self.log(f"******** Waiting for SOLAR_OPT Event *********")
-
-    def set_default_params(self):
-        self.params = {}
 
     def load_args(self, keys=None):
         self.pointers = []
@@ -137,7 +153,8 @@ class SolarOpt(hass.Hass):
                             "tariff_code"
                         ]
                         self.params[f"octopus_{tariff}_tariff_code"] = tariff_code
-                        self.log(f"Got {tariff.title()} sensor automatically. Tariff code: {tariff_code}")
+                        if DEBUG:
+                            self.log(f"Got {tariff.title()} sensor automatically. Tariff code: {tariff_code}")
 
             else:
                 if DEBUG:
@@ -529,7 +546,8 @@ class SolarOpt(hass.Hass):
                 for tariff in TARIFFS:
                     if tariff in self.sensors.keys():
                         sensor = self.sensors[tariff]
-                        self.log(f"{tariff.title()} sensor: {sensor}")
+                        if DEBUG:
+                            self.log(f"{tariff.title()} sensor: {sensor}")
 
                         try:
                             # Read the price from the Octopus sensor attribute and convert to a DataFrame
@@ -555,7 +573,8 @@ class SolarOpt(hass.Hass):
                         self.df[tariff] = df
                         self.df[tariff].fillna(self.df[tariff].dropna()[-1], inplace=True)
 
-                        self.log(f"** {tariff.title()} tariff price data loaded OK **")
+                        if DEBUG:
+                            self.log(f"** {tariff.title()} tariff price data loaded OK **")
                     else:
                         self.log(f"** {tariff.title()} price data unavailable - set to zero **")
                         if tariff == "Import":
@@ -573,7 +592,8 @@ class SolarOpt(hass.Hass):
             return False
 
     def load_solcast(self):
-        self.log("Getting Solcast data")
+        if DEBUG:
+            self.log("Getting Solcast data")
         try:
             solar = self.get_state(SOLCAST_ENTITY_TODAY, attribute="all")["attributes"]["detailedForecast"]
             solar += self.get_state(SOLCAST_ENTITY_TOMORROW, attribute="all")["attributes"]["detailedForecast"]
@@ -596,7 +616,8 @@ class SolarOpt(hass.Hass):
             df *= 1000 / self.freq
 
             self.df = pd.concat([self.df, df.fillna(0)], axis=1)
-            self.log("** Solcast forecast loaded OK **")
+            if DEBUG:
+                self.log("** Solcast forecast loaded OK **")
             return True
 
         except Exception as e:
@@ -604,36 +625,61 @@ class SolarOpt(hass.Hass):
             return False
 
     def load_consumption(self):
-        self.log("Getting expected consumption data")
+        if DEBUG:
+            self.log("Getting expected consumption data")
 
-        try:
-            # load history fot the last N days from the specified sensor
-            df = self.hass2df(self.params["entity_id_consumption"], days=int(self.params["consumption_history_days"]))
+        if self.params["consumption_from_entity"]:
+            try:
+                # load history fot the last N days from the specified sensor
+                df = self.hass2df(
+                    self.params["entity_id_consumption"], days=int(self.params["consumption_history_days"])
+                )
 
-        except Exception as e:
-            self.log(f"Unable to get historical consumption from {self.params['entity_id_consumption']}")
-            self.log(f"Error: {e}")
-            return False
+            except Exception as e:
+                self.log(f"Unable to get historical consumption from {self.params['entity_id_consumption']}")
+                self.log(f"Error: {e}")
+                return False
 
-        try:
-            # df = pd.DataFrame(hist[0]).set_index("last_updated")["state"]
-            df.index = pd.to_datetime(df.index)
-            df = pd.to_numeric(df, errors="coerce").dropna().resample("30T").mean()
+            try:
+                # df = pd.DataFrame(hist[0]).set_index("last_updated")["state"]
+                df.index = pd.to_datetime(df.index)
+                df = pd.to_numeric(df, errors="coerce").dropna().resample("30T").mean().fillna(0)
 
-            # Group by time and take the mean
-            df = df.groupby(df.index.time).aggregate(self.params["consumption_grouping"]) * -1
-            df.name = "consumption"
+                # Group by time and take the mean
+                df = df.groupby(df.index.time).aggregate(self.params["consumption_grouping"]) * -1
+                df.name = "consumption"
 
-            self.df["time"] = self.df.index.time
-            self.df = self.df.merge(df, "left", left_on="time", right_index=True)
+                self.df["time"] = self.df.index.time
+                self.df = self.df.merge(df, "left", left_on="time", right_index=True)
 
-            self.df = self.df[self.df.index >= pd.Timestamp.now().tz_localize(self.tz) - pd.Timedelta("30T")]
-            self.log("** Estimated consumption loaded OK **")
-            return True
+                self.df = self.df[self.df.index >= pd.Timestamp.now().tz_localize(self.tz) - pd.Timedelta("30T")]
+                if DEBUG:
+                    self.log("** Estimated consumption loaded OK **")
+                return True
 
-        except Exception as e:
-            self.log(f"Error loading consumption data: {e}")
-            return False
+            except Exception as e:
+                self.log(f"Error loading consumption data: {e}")
+                return False
+
+        else:
+            try:
+                df = pd.DataFrame(
+                    index=["0:00", "4:00", "8:30", "14:30", "19:30", "22:00", "23:30"],
+                    data=[200, 150, 500, 390, 800, 800, 320],
+                )
+                df.index = pd.to_datetime(df.index).tz_localize("UTC")
+                df2 = df.copy()
+                df2.index += pd.Timedelta("1D")
+                df = pd.concat([df, df2]).set_axis(["consumption"], axis=1)
+                self.log(df.index)
+                self.df = pd.concat([self.df, df], axis=1).interpolate()
+                self.df["consumption"] *= self.params["daily_consumption_Wh"] / -11000
+                self.df = self.df[self.df.index >= pd.Timestamp.now().tz_localize(self.tz) - pd.Timedelta("30T")]
+                return True
+
+            except Exception as e:
+                self.log(f"Error calculating modelled consumption data: {e}")
+                return False
 
 
 # %%
