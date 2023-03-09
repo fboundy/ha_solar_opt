@@ -4,11 +4,12 @@ import appdaemon.plugins.hass.hassapi as hass
 # import mqttapi as mqtt
 import pandas as pd
 from math import ceil
+import requests
 
 # %%
 # from json import dumps
 
-VERSION = "1.1.5"
+VERSION = "1.1.6"
 
 DEBUG = False
 DEBUG_PARAMS = False
@@ -21,6 +22,9 @@ OUTPUT_SOC_ENTITY = "sensor.solaropt_optimised_target_soc"
 OUTPUT_START_ENTITY = "sensor.solaropt_charge_start"
 OUTPUT_END_ENTITY = "sensor.solaropt_charge_end"
 OUTPUT_CURRENT_ENTITY = "sensor.solaropt_charge_current"
+OUTPUT_BASE_COST_ENTITY = "sensor.solaropt_base_cost"
+OUTPUT_OPT_COST_ENTITY = "sensor.solaropt_optimised_cost"
+OUTPUT_ALT_OPT_ENTITY = "sensor.solaropt_{key}"
 
 TARIFFS = ["import", "export"]
 SOLCAST_ENTITY_TODAY = "sensor.solcast_forecast_today"
@@ -50,7 +54,7 @@ class SolarOpt(hass.Hass):
             "charger_power_watts": 3000,
             "battery_voltage": 50,
             "entity_id_battery_soc": "sensor.solis_battery_soc",
-            "solar_forecast": "Solcast Swanson",
+            "solar_forecast": "Solcast_Swanson",
             "entity_id_consumption": "sensor.solis_total_load_power",
             "consumption_history_days": 7,
             "consumption_grouping": "mean",
@@ -70,6 +74,7 @@ class SolarOpt(hass.Hass):
         self.listen_state(self.optimise_state_change, SOLCAST_ENTITY_TODAY)
         self.log(f"************ SolarOpt Initialised ************")
         # self.optimise()
+        self.get_octopus_products()
         self.log(f"******** Waiting for SOLAR_OPT Event *********")
 
     def load_args(self, keys=None):
@@ -196,15 +201,6 @@ class SolarOpt(hass.Hass):
         self.df["period_start"] = self.df.index.strftime("%Y-%m-%dT%H:%M:%S+00:00")
         self.freq = self.df.index.freq / pd.Timedelta("60T")
 
-        # Load prices
-        try:
-            if not self.load_prices():
-                raise Exception
-
-        except Exception as e:
-            self.log(f"Unable to load price data: {e}")
-            return False
-
         # Load Solcast
         try:
             if not self.load_solcast():
@@ -223,16 +219,40 @@ class SolarOpt(hass.Hass):
             self.log(f"Unable to load estimated consumption: {e}")
             return False
 
-        # Calculate when the next charging slot is
-        self.calc_charging_slot()
+        self.df = self.df[self.df.index >= pd.Timestamp.now().tz_localize(self.tz) - pd.Timedelta("30T")]
+
+        # Calculate with existing prices
+
+        for codes in self.alt_tariffs:
+            self.calc_for_price(codes)
+
+        self.calc_for_price()
+
+        self.write_output()
+
+    def calc_for_price(self, alt=None):
+        # Load prices
+        try:
+            if not self.load_prices(alt):
+                raise Exception
+
+        except Exception as e:
+            self.log(f"Unable to load price data: {e}")
+            return False
+
+        agile = self.calc_charging_slot(alt)
 
         # Calculate the flows and cashflow with no charging
-        self.calc_flows()
-        self.log(f"Reference cost (no solar):  GBP{self.df['ref_cost'].sum():5.2f}")
-        self.log(f"Net cost (no optimisation): GBP{self.df['net_cost'].sum():5.2f}")
+        self.calc_flows(target_soc=None, agile=agile)
+
+        if alt is None:
+            self.log(f"Reference cost (no solar):  GBP{self.df['ref_cost'].sum():5.2f}")
+        self.net_cost_base = self.df["net_cost"][self.df.index >= self.charge_end_datetime.normalize()].sum()
+        self.log(f"Net cost (no optimisation): GBP{self.net_cost_base:5.2f}")
 
         if (self.params["optimise_flag"]) and (self.df["import"].sum() > 0):
-            self.log("Optimising target SOC")
+            if alt is None:
+                self.log("Optimising target SOC")
             soc_range = list(range(int(ceil(self.params["maximum_dod_percent"] / 5) * 5), 101, 5))
         else:
             if self.df["import"].sum() == 0:
@@ -240,19 +260,28 @@ class SolarOpt(hass.Hass):
             soc_range = [int(float(self.params["default_target_soc"]))]
             self.log(f"Using default target SOC of {soc_range[0]}%")
 
-        nc = []
+        net_cost = []
         for target_soc in soc_range:
             self.calc_flows(target_soc)
-            nc.append(self.df["net_cost"].sum())
+            net_cost.append(self.df["net_cost"][self.df.index >= self.charge_end_datetime.normalize()].sum())
 
-        nc_opt = min(nc)
-        self.optimised_target_soc = soc_range[nc.index(nc_opt)]
-        self.calc_flows(self.optimised_target_soc)
+        net_cost_opt = min(net_cost)
+        opt_soc = soc_range[net_cost.index(net_cost_opt)]
 
-        nc_opt = self.df["net_cost"].sum()
-        self.log((f"Optimum SOC: {self.optimised_target_soc}% with net cost GBP{nc_opt:5.2f}"))
-
-        self.write_output()
+        if alt is None:
+            self.optimised_target_soc = opt_soc
+            self.calc_flows(self.optimised_target_soc)
+            self.net_cost_opt = round(
+                self.df["net_cost"][self.df.index >= self.charge_end_datetime.normalize()].sum(), 2
+            )
+            self.log(
+                (
+                    f"Optimum SOC for forecast {self.params['solar_forecast']}: {self.optimised_target_soc}% with net cost GBP{self.net_cost_opt:5.2f}"
+                )
+            )
+        else:
+            self.alt_opt[alt] = round(net_cost_opt, 2)
+            self.log(f"Optimised cost for alternative tariff {alt}: GBP {net_cost_opt:5.2f}")
 
     def write_to_hass(self, entity, state, attributes):
         try:
@@ -270,7 +299,7 @@ class SolarOpt(hass.Hass):
                 "unit_of_measurement": "%",
                 "state_class": "measurement",
                 "device_class": "battery",
-                "friendly name": "Solar_Opt Optimised Target SOC",
+                "friendly_name": "Solar_Opt Optimised Target SOC",
                 "optimised_soc": self.df[["period_start", "soc"]].to_dict("records"),
                 "raw_soc": self.df[["period_start", "soc0"]]
                 .set_axis(["period_start", "soc"], axis=1)
@@ -283,7 +312,7 @@ class SolarOpt(hass.Hass):
             entity=OUTPUT_START_ENTITY,
             state=self.charge_start_datetime,
             attributes={
-                "friendly name": "Solar_Opt Next Charge Period Start",
+                "friendly_name": "Solar_Opt Next Charge Period Start",
             },
         )
 
@@ -291,7 +320,7 @@ class SolarOpt(hass.Hass):
             entity=OUTPUT_END_ENTITY,
             state=self.charge_end_datetime,
             attributes={
-                "friendly name": "Solar_Opt Next Charge Period End",
+                "friendly_name": "Solar_Opt Next Charge Period End",
             },
         )
 
@@ -299,24 +328,61 @@ class SolarOpt(hass.Hass):
             entity=OUTPUT_CURRENT_ENTITY,
             state=round(self.charge_current, 2),
             attributes={
-                "friendly name": "Solar_Opt Charging Current",
+                "friendly_name": "Solar_Opt Charging Current",
                 "unit_of_measurement": "A",
                 "state_class": "measurement",
                 "device_class": "current",
             },
         )
 
-    def calc_charging_slot(self):
+        self.write_to_hass(
+            entity=OUTPUT_BASE_COST_ENTITY,
+            state=round(self.net_cost_base, 2),
+            attributes={
+                "friendly_name": "Solar_Opt Base Net Cost",
+                "unit_of_measurement": "GBP",
+            },
+        )
+
+        self.write_to_hass(
+            entity=OUTPUT_OPT_COST_ENTITY,
+            state=round(self.net_cost_opt, 2),
+            attributes={
+                "friendly_name": "Solar_Opt Optimised Net Cost",
+                "unit_of_measurement": "GBP",
+            },
+        )
+
+        for key in self.alt_opt.keys():
+            imp = key.split("_")[2].title()
+            exp = key.split("_")[4].title()
+            self.write_to_hass(
+                entity=OUTPUT_ALT_OPT_ENTITY.replace("{key}", key[4:]),
+                state=self.alt_opt[key],
+                attributes={
+                    "friendly_name": f"Solar_Opt Alternative Net Cost for {imp} | {exp}",
+                    "unit_of_measurement": "GBP",
+                },
+            )
+
+    def calc_charging_slot(self, alt=None):
         time_now = pd.Timestamp.now().tz_localize(self.tz)
         if FIX_TIME:
             time_now = DEBUG_TIME_NOW
 
+        if alt is None:
+            import_code = self.params["octopus_import_tariff_code"]
+        else:
+            import_code = self.alt_tariffs[alt]["import"]
+
         if bool(self.params["charge_auto_select"]):
             if DEBUG:
                 self.log("Auto-detecting charge times")
-            if not "AGILE" in self.params["octopus_import_tariff_code"]:
+            if not "AGILE" in import_code:
                 # Fixed time slot calculation
                 night_rate = self.df["import"].min()
+                if DEBUG:
+                    self.log(f"Night rate: {night_rate}")
 
                 # look forward from now and see when the next slot at this rate starts:
                 self.charge_start_datetime = self.df[
@@ -346,6 +412,10 @@ class SolarOpt(hass.Hass):
                     self.log("WARNING: Only one import tariff rate detected. Charge optimisation will not be possible.")
 
             else:
+                if DEBUG:
+                    self.log("** Agile import tariff detected **")
+
+                return True
                 # TO-DO:
                 # Still need to work out how to deal with Agile the best time starts now....
 
@@ -432,13 +502,14 @@ class SolarOpt(hass.Hass):
         self.chg_mask = (self.df.index >= self.charge_start_datetime) & (self.df.index < self.charge_end_datetime)
         self.log(f"Charging slot start {self.charge_start_datetime}")
         self.log(f"Charging slot end {self.charge_end_datetime}")
+        return False
 
-    def calc_flows(self, target_soc=None):
+    def calc_flows(self, target_soc=None, agile=False):
         self.initial_chg = (
             float(self.get_state(self.params["entity_id_battery_soc"])) / 100 * self.params["battery_capacity_Wh"]
         )
         solar_source = self.params["solar_forecast"]
-        if solar_source == "Solcast Swanson":
+        if solar_source == "Solcast_Swanson":
             weights = {"Solcast_p10": 0.3, "Solcast": 0.4, "Solcast_p90": 0.3}
         else:
             weights = {solar_source: 1}
@@ -450,13 +521,16 @@ class SolarOpt(hass.Hass):
         for source in weights:
             battery_flows = self.df[source] + self.df["consumption"]
             if target_soc is not None:
-                hours = (self.charge_end_datetime - self.charge_start_datetime).seconds / 3600
-                target_chg = target_soc * self.params["battery_capacity_Wh"] / 100
-                chg_start = self.df["chg0"].loc[self.charge_start_datetime]
-                if target_chg > chg_start:
-                    charge_flow = (target_chg - chg_start) / hours / self.params["charger_efficiency_percent"] * 100
-                    battery_flows[self.chg_mask] = charge_flow
-                    self.charge_current = charge_flow / self.params["battery_voltage"]
+                if not agile:
+                    hours = (self.charge_end_datetime - self.charge_start_datetime).seconds / 3600
+                    target_chg = target_soc * self.params["battery_capacity_Wh"] / 100
+                    chg_start = self.df["chg0"].loc[self.charge_start_datetime.round("-30T")]
+                    if target_chg > chg_start:
+                        charge_flow = (target_chg - chg_start) / hours / self.params["charger_efficiency_percent"] * 100
+                        battery_flows[self.chg_mask] = charge_flow
+                        self.charge_current = charge_flow / self.params["battery_voltage"]
+                else:
+                    pass
 
             chg = [self.initial_chg]
             for flow in battery_flows:
@@ -500,91 +574,142 @@ class SolarOpt(hass.Hass):
             self.df["chg0"] = self.df["chg"]
             self.df["soc0"] = self.df["soc"]
 
-    def load_prices(self):
+    def load_prices(self, price_codes=None):
         try:
-            if self.params["manual_tariff"]:
+            if price_codes is None:
                 if DEBUG:
-                    self.log("Loading manual tariffs")
+                    self.log("Loading default prices set")
+                if self.params["manual_tariff"]:
+                    if DEBUG:
+                        self.log("Loading manual tariffs")
+
+                    for tariff in TARIFFS:
+                        valid_prices = {}
+                        # Get all the import prices
+                        prices = [x for x in self.params.keys() if f"{tariff}_tariff" in x and "price" in x]
+                        if DEBUG:
+                            self.log(f"{tariff.title()}: {prices}")
+
+                        # If there is only one price then set it for the entire period
+                        if len(prices) == 1:
+                            self.df[tariff] = self.params[prices[0]]
+
+                        else:
+                            for price in prices:
+                                start_time = price.replace("price", "start")
+                                # Check there is a starttime for the price
+                                if price in self.params.keys():
+                                    # Add an entry for yesterday, today and tomorrow at the price
+                                    for days in range(-1, 2):
+                                        valid_prices[
+                                            pd.Timestamp(self.params[start_time]).tz_localize(self.tz)
+                                            + pd.Timedelta(days=days)
+                                        ] = self.params[price]
+                            # Sort the dict
+                            valid_prices = dict(sorted(valid_prices.items()))
+                            if DEBUG:
+                                self.log(f"Valid {tariff} prices: {valid_prices}")
+
+                            for start_datetime in valid_prices:
+                                self.df.loc[self.df.index >= start_datetime, tariff] = valid_prices[start_datetime]
+
+                        if DEBUG:
+                            self.log(self.df[tariff])
+
+                else:
+                    if DEBUG:
+                        self.log("Loading sensor-based tariffs")
+
+                    for tariff in TARIFFS:
+                        if tariff in self.sensors.keys():
+                            sensor = self.sensors[tariff]
+                            if DEBUG:
+                                self.log(f"{tariff.title()} sensor: {sensor}")
+
+                            try:
+                                # Read the price from the Octopus sensor attribute and convert to a DataFrame
+                                prices = self.get_state(sensor, attribute="all")["attributes"]["rates"]
+
+                            except Exception as e:
+                                self.log(f"Attributes unavailable for sensor: {sensor}")
+                                self.log(f"No {tariff} price data available: {e}")
+
+                            df = pd.DataFrame(prices)
+                            df = df.set_index("from")["rate"]
+
+                            # Convert the index to datetime
+                            df.index = pd.to_datetime(df.index)
+
+                            # If it's only today's data pad it out assuming tomorrow = today
+                            if len(df) < 94:
+                                dfx = df.copy()
+                                dfx.index = dfx.index + pd.Timedelta("1D")
+                                df = pd.concat([df, dfx])
+
+                            # Fill any missing data (after 23:00) with the 22:30 data
+                            self.df[tariff] = df
+                            self.df[tariff].fillna(self.df[tariff].dropna()[-1], inplace=True)
+
+                            if DEBUG:
+                                self.log(f"** {tariff.title()} tariff price data loaded OK **")
+                        else:
+                            self.log(f"** {tariff.title()} price data unavailable - set to zero **")
+                            if tariff == "Import":
+                                self.log("Unable to optimise with no import tariff")
+                    # DEBUG
+                    if FAKE_AGILE_IMPORT:
+                        self.df["import"] = self.df["export"] + FAKE_AGILE_DIFF
+                        self.params["octopus_import_tariff_code"] = "FAKE_AGILE"
+
+                return True
+
+            else:
+                if DEBUG:
+                    self.log(f"Loading prices for Alternative Tariff {price_codes}")
 
                 for tariff in TARIFFS:
-                    valid_prices = {}
-                    # Get all the import prices
-                    prices = [x for x in self.params.keys() if f"{tariff}_tariff" in x and "price" in x]
-                    if DEBUG:
-                        self.log(f"{tariff.title()}: {prices}")
-
-                    # If there is only one price then set it for the entire period
-                    if len(prices) == 1:
-                        self.df[tariff] = self.params[prices[0]]
+                    code = self.alt_tariffs[price_codes][tariff]
+                    product = code[5:-2]
+                    if code[2] == "1":
+                        url = f"https://api.octopus.energy/v1/products/{product}/electricity-tariffs/{code}/standard-unit-rates/"
+                        df = pd.DataFrame(requests.get(url).json()["results"]).set_index("valid_from")["value_inc_vat"]
+                        df.index = pd.to_datetime(df.index)
+                        df = df.reindex(
+                            index=pd.date_range(
+                                df.index.min(),
+                                pd.Timestamp.now().tz_localize("UTC").normalize() + pd.Timedelta("2D"),
+                                freq="30T",
+                            )
+                        ).fillna(method="ffill")
+                        self.df[tariff] = df
 
                     else:
-                        for price in prices:
-                            start_time = price.replace("price", "start")
-                            # Check there is a starttime for the price
-                            if price in self.params.keys():
-                                # Add an entry for yestersday, today and tomorrow at the price
-                                for days in range(-1, 2):
-                                    valid_prices[
-                                        pd.Timestamp(self.params[start_time]).tz_localize(self.tz)
-                                        + pd.Timedelta(days=days)
-                                    ] = self.params[price]
-                        # Sort the dict
+                        eco7 = {
+                            "day": "07:30",
+                            "night": "00:30",
+                        }
+
+                        valid_prices = {}
+
+                        for slot in eco7.keys():
+                            url = f"https://api.octopus.energy/v1/products/{product}/electricity-tariffs/{code}/{slot}-unit-rates/"
+                            price = requests.get(url).json()["results"][0]["value_inc_vat"]
+
+                            for days in range(-1, 2):
+                                valid_prices[
+                                    pd.Timestamp(eco7[slot]).tz_localize(self.tz) + pd.Timedelta(days=days)
+                                ] = price
+
                         valid_prices = dict(sorted(valid_prices.items()))
                         if DEBUG:
-                            self.log(f"Valid {tariff} prices: {valid_prices}")
+                            self.log(f"{code}: {valid_prices}")
 
                         for start_datetime in valid_prices:
                             self.df.loc[self.df.index >= start_datetime, tariff] = valid_prices[start_datetime]
 
                     if DEBUG:
                         self.log(self.df[tariff])
-
-            else:
-                if DEBUG:
-                    self.log("Loading sensor-based tariffs")
-
-                for tariff in TARIFFS:
-                    if tariff in self.sensors.keys():
-                        sensor = self.sensors[tariff]
-                        if DEBUG:
-                            self.log(f"{tariff.title()} sensor: {sensor}")
-
-                        try:
-                            # Read the price from the Octopus sensor attribute and convert to a DataFrame
-                            prices = self.get_state(sensor, attribute="all")["attributes"]["rates"]
-
-                        except Exception as e:
-                            self.log(f"Attributes unavailable for sensor: {sensor}")
-                            self.log(f"No {tariff} price data available: {e}")
-
-                        df = pd.DataFrame(prices)
-                        df = df.set_index("from")["rate"]
-
-                        # Convert the index to datetime
-                        df.index = pd.to_datetime(df.index)
-
-                        # If it's only today's data pad it out assuming tomorrow = today
-                        if len(df) < 94:
-                            dfx = df.copy()
-                            dfx.index = dfx.index + pd.Timedelta("1D")
-                            df = pd.concat([df, dfx])
-
-                        # Fill andy missing data (after 23:00) with the 22:30 data
-                        self.df[tariff] = df
-                        self.df[tariff].fillna(self.df[tariff].dropna()[-1], inplace=True)
-
-                        if DEBUG:
-                            self.log(f"** {tariff.title()} tariff price data loaded OK **")
-                    else:
-                        self.log(f"** {tariff.title()} price data unavailable - set to zero **")
-                        if tariff == "Import":
-                            self.log("Unable to optimise with no import tariff")
-                # DEBUG
-                if FAKE_AGILE_IMPORT:
-                    self.df["import"] = self.df["export"] + FAKE_AGILE_DIFF
-                    self.params["octopus_import_tariff_code"] = "FAKE_AGILE"
-
-            return True
+                return True
 
         except Exception as e:
             if DEBUG:
@@ -652,7 +777,6 @@ class SolarOpt(hass.Hass):
                 self.df["time"] = self.df.index.time
                 self.df = self.df.merge(df, "left", left_on="time", right_index=True)
 
-                self.df = self.df[self.df.index >= pd.Timestamp.now().tz_localize(self.tz) - pd.Timedelta("30T")]
                 if DEBUG:
                     self.log("** Estimated consumption loaded OK **")
                 return True
@@ -674,12 +798,91 @@ class SolarOpt(hass.Hass):
                 self.log(df.index)
                 self.df = pd.concat([self.df, df], axis=1).interpolate()
                 self.df["consumption"] *= self.params["daily_consumption_Wh"] / -11000
-                self.df = self.df[self.df.index >= pd.Timestamp.now().tz_localize(self.tz) - pd.Timedelta("30T")]
                 return True
 
             except Exception as e:
                 self.log(f"Error calculating modelled consumption data: {e}")
                 return False
+
+    def get_octopus_products(self):
+        products = requests.get("https://api.octopus.energy/v1/products/").json()["results"]
+
+        codes = {}
+        codes["import"] = [
+            p["code"]
+            for p in products
+            if not max(
+                [
+                    x in p["code"]
+                    for x in [
+                        "BULB",
+                        "LP",
+                        "BB",
+                        "M-AND-S",
+                        "AFFECT",
+                        "COOP",
+                        "OUTGOING",
+                        "PREPAY",
+                        "EXPORT",
+                        "PP",
+                        "ES",
+                        "OCC",
+                    ]
+                ]
+            )
+        ]
+
+        codes["export"] = [
+            p["code"]
+            for p in products
+            if max([x in p["code"] for x in ["OUTGOING", "EXPORT"]]) and not "BB" in p["code"]
+        ]
+
+        alt_codes = {
+            "import": {
+                "agile": "AGIL",
+                "cosy": "COSY",
+                "go": "GO-V",
+                "eco7": "VAR-",
+                "flux": "FLUX",
+            },
+            "export": {
+                "agile": "AGILE-OUTG",
+                "fix": "OUTGOING-F",
+                "flux": "FLUX-EXPOR",
+                "seg": "OUTGOING-S",
+            },
+        }
+
+        area_suffix = self.params["octopus_import_tariff_code"][-2:]
+
+        self.alt_tariffs = {}
+        self.alt_opt = {}
+        alt_keys = [x for x in self.params.keys() if "alt" in x]
+        if DEBUG:
+            self.log(alt_keys)
+        for key in alt_keys:
+            if self.params[key]:
+                self.alt_tariffs[key] = {}
+                for i, t in enumerate(TARIFFS):
+                    if ("eco7" in key) and (t == "import"):
+                        prefix = "E-2R-"
+                    else:
+                        prefix = "E-1R-"
+
+                    self.alt_tariffs[key][t] = (
+                        prefix
+                        + [
+                            x
+                            for x in codes[t]
+                            if alt_codes[t][key.split("_")[i * 2 + 2]]
+                            == x[: len(alt_codes[t][key.split("_")[i * 2 + 2]])]
+                        ][0]
+                        + area_suffix
+                    )
+
+        if DEBUG:
+            self.log(self.alt_tariffs)
 
 
 # %%

@@ -2,7 +2,7 @@
 
 Solar / Battery Charging Optimisation for Home Assistant
 
-<h2>Pre-Release v1.1.5</h2>
+<h2>Pre-Release v1.1.6</h2>
 
 Initial pre-release. Quite probably full of un-documented features....
 
@@ -130,7 +130,7 @@ All of these are required but will be defaulted if not specified\*.
 
 | Name                    |   Type    |  Default  | Can Point to Entity | Description                                                                                                                                                                    |
 | ----------------------- | :-------: | :-------: | :-----------------: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| solar_forecast          | `string`  | `Solcast` |       `true`        | Valid options are `Solcast` (Solcast mid-case), `Solcast_p90` (Solcast high), `Solcast_p10` (Solcast low), `Solcast Swanson` (Solcast weighted mean)                           |
+| solar_forecast          | `string`  | `Solcast` |       `true`        | Valid options are `Solcast` (Solcast mid-case), `Solcast_p90` (Solcast high), `Solcast_p10` (Solcast low), `Solcast_Swanson` (Solcast weighted mean)                           |
 | consumption_from_entity | `boolean` |  `true`   |       `true`        | Controls whether to use an entity to get historic consumption (`true`) or to use a model of typical consumption vs time together with an estimated daily consumption (`false`) |
 | entity_id_consumption:  | `string`  |           |     `required`      | Entity that reports consumption                                                                                                                                                |
 | consumption_days        |   `int`   |     7     |       `true`        | Number of days history to use                                                                                                                                                  |
@@ -148,6 +148,39 @@ If `charge_auto_select` is `true` the charge times will be detected automaticall
 | charge_fixed_end   |  `time`   |         |       `true`        | Fixed charging end time (UTC)                                                                                 |
 | default_target_soc |   `int`   |   100   |       `true`        | Default un-optimised target SOC. Charge current will be calculated for this SOC if `optimise_flag` is `false` |
 | optimise_flag:     | `boolean` | `true`  |       `true`        | Controls whether to optimise charging time and target SOC                                                     |
+
+<h3>Alternative Octopus Tariffs</h3>
+
+Optionally the app will generate the Optimised Cost for an any number alternative pairs of Import and Export tariffs selected from the following list. The format for the parameter in `config.yaml` is:
+
+    alt_import_{import_name}_export_{export_name}: true
+
+Valid import names are:
+
+| Name  | Current Product Code | Comment                           |
+| ----- | -------------------- | --------------------------------- |
+| Agile | AGILE-FLEX-22-11-25  | \*\* Not yet implemented          |
+| Cosy  | COSY-22-12-08        |
+| Flux  | FLUX-IMPORT-23-02-14 | Must be combined with Flux Export |
+| Go    | GO-VAR-22-10-14      | Requires an EV                    |
+| Eco7  | VAR-22-10-01         |
+
+Valid import names are:
+
+| Name  | Current Product Code          | Comment                                           |
+| ----- | ----------------------------- | ------------------------------------------------- |
+| Agile | AGILE-OUTGOING-19-05-13       |                                                   |
+| Flux  | FLUX-EXPORT-23-02-14          | Must be combined with Flux Import                 |
+| Fixed | OUTGOING-FIX-12M-19-05-13     | Only availabe with certain Octopus Import tariffs |
+| SEG   | OUTGOING-SEG-FIX-12M-20-07-07 |                                                   |
+
+For example, to generate alternative optimised prices for Flux, Go/SEG and Eco7/Agile would require:
+
+    alt_import_flux_export_flux: true
+    alt_import_go_export_seg: true
+    alt_import_agile_export_agile: true
+
+The resulting output for each is written to a sensor: `sensor.solaropt_import_{import_name}_export_{export_name}`. You can track these over time to see if you would be better off with a different tariff.
 
 <h2>Triggering the App</h2>
 

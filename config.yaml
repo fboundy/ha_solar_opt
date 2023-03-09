@@ -1,4 +1,4 @@
-# v1.1.5
+# v1.1.6
 solar_opt:
   module: solar_opt
   class: SolarOpt
@@ -60,17 +60,17 @@ solar_opt:
   # Solcast         - the Solcast mid-case forecast [Default]
   # Solcast_p90     - the Solcast high estimate
   # Solcast_p10     - the Solcast high estimate
-  # Solcast Swanson - uses the Swanson's mean of the cashflows from the above (Recommended)
+  # Solcast_Swanson - uses the Swanson's mean of the cashflows from the above (Recommended)
   # 
   # Set this using an "input_select" helper and it can be varied on the fly
 
   solar_forecast: input_select.solar_forecast_source
 
   # consumption estimation
-  consumption_from_entity: false
+  consumption_from_entity: input_boolean.solar_opt_consumption_from_entity
   entity_id_consumption: sensor.solis_total_load_power
-  consumption_history_days: 7
-  consumption_grouping: mean
+  consumption_history_days: input_number.solar_opt_consumption_days
+  consumption_grouping: input_select.solar_opt_consumption_grouping
   daily_consumption_Wh: 17000
   
 
@@ -88,3 +88,35 @@ solar_opt:
   default_target_soc: input_number.eco7_target_soc                      # Default un-optimised target SOC
   optimise_flag: input_boolean.solis_eco7_opt
 
+
+  # ========================================
+  # Alternative Octopus tariffs:
+  # ========================================
+
+  # Activating any of these flags will enable the calculation of optimised net cost for alternative
+  # tariffs. You can choose any combination of the following. Current tariff codes are shown but the app will look up the latest prices that are 
+  # available using the area code suffix from your existing tariff.
+  #
+  # NOTE: Not all tariffs or Import/Export combinations are available. Some may require an EV. Check Octopus
+  # Ts and Cs for details
+  #
+  # Import:
+  # -------
+  # Agile     AGILE-FLEX-22-11-25
+  # Cosy      COSY-22-12-08
+  # Flux      FLUX-IMPORT-23-02-14
+  # Go        GO-VAR-22-10-14
+  # Eco7      VAR-22-10-01
+  #
+  # Export
+  # ------
+  # Agile     AGILE-OUTGOING-19-05-13
+  # Flux      FLUX-EXPORT-23-02-14
+  # Fixed     OUTGOING-FIX-12M-19-05-13
+  # SEG       OUTGOING-SEG-FIX-12M-20-07-07
+
+  alt_import_agile_export_agile: false
+  alt_import_flux_export_flux: true
+  alt_import_eco7_export_fix: true
+  alt_import_eco7_export_agile: true
+  alt_import_go_export_seg: true
