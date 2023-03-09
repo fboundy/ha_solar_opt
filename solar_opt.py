@@ -9,7 +9,7 @@ import requests
 # %%
 # from json import dumps
 
-VERSION = "1.1.6"
+VERSION = "1.2.0"
 
 DEBUG = False
 DEBUG_PARAMS = False

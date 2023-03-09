@@ -1,8 +1,6 @@
-# Home Assistant Solar Optimiser
+# Home Assistant Solar Optimiser v1.2.0
 
 Solar / Battery Charging Optimisation for Home Assistant
-
-<h2>Version v1.1.6</h2>
 
 <h2>Pre-requisites</h2>
 
