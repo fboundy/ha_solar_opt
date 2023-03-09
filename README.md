@@ -2,9 +2,7 @@
 
 Solar / Battery Charging Optimisation for Home Assistant
 
-<h2>Pre-Release v1.1.6</h2>
-
-Initial pre-release. Quite probably full of un-documented features....
+<h2>Version v1.1.6</h2>
 
 <h2>Pre-requisites</h2>
 
